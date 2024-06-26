@@ -5,6 +5,56 @@
     "publisher": "kaptainmicila",
     "icon": "icons/GZDoom.png",
     "version": "1.9.3",
+    "scripts": {
+        "compile": "tsc -p ./",
+        "lint": "eslint src --ext ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "esbuild-base": "esbuild ./src/extension.ts --bundle --tsconfig=./tsconfig.json --external:vscode --format=cjs --platform=node --outfile=dist/extension.js",
+        "watch": "npm run -S esbuild-base -- --sourcemap --sources-content=false --watch",
+        "esbuild-web": "esbuild ./src/web-extension.ts --bundle --tsconfig=./tsconfig.json --external:vscode --format=cjs --platform=browser --outfile=dist/web-extension.js",
+        "watch-web": "npm run -S esbuild-web -- --sourcemap --sources-content=false --watch",
+        "build": "npm run -S esbuild-base -- --sourcemap --sources-content=false && npm run -S esbuild-web -- --sourcemap --sources-content=false",
+        "package": "vsce package",
+        "publish": "vsce publish",
+        "publish-pre-release": "vsce publish --pre-release",
+        "vscode:prepublish": "rimraf dist && npm run -S esbuild-base -- --minify && npm run -S esbuild-web -- --minify",
+        "test": "npm run typecheck"
+    },
+    "devDependencies": {
+        "@types/chalk": "^2.2.0",
+        "@types/glob": "^7.2.0",
+        "@types/mocha": "^9.1.0",
+        "@types/node": "^14.14.37",
+        "@types/split2": "^4.2.1",
+        "@types/vscode": "^1.90.0",
+        "@typescript-eslint/eslint-plugin": "^5.17.0",
+        "@typescript-eslint/parser": "^5.17.0",
+        "@vscode/debugadapter": "^1.56.0",
+        "@vscode/debugadapter-testsupport": "^1.56.0",
+        "await-notify": "^1.0.1",
+        "base64-js": "^1.5.1",
+        "esbuild": "^0.14.29",
+        "eslint": "^8.12.0",
+        "events": "^3.3.0",
+        "glob": "^7.2.0",
+        "mocha": "^9.2.2",
+        "path-browserify": "^1.0.1",
+        "rimraf": "^3.0.2",
+        "typescript": "^4.6.3",
+        "url": "^0.11.0",
+        "vsce": "^2.7.0"
+    },
+    "dependencies": {
+        "@types/lodash.get": "^4.4.9",
+        "chalk": "^5.3.0",
+        "lodash.get": "^4.4.2",
+        "pino": "^8.15.1",
+        "pino-pretty": "^10.2.0",
+        "split2": "^4.2.0",
+        "vscode-languageclient": "^5.2.1"
+    },
+    "main": "./dist/extension.js",
+    "browser": "./dist/web-extension.js",
     "repository": {
         "type": "git",
         "url": "https://github.com/KaptainMicila/ZScript-VSCode.git"
@@ -14,6 +64,13 @@
     },
     "categories": [
         "Programming Languages"
+    ],
+    "activationEvents": [
+        "onDebugResolve:gzdoom",
+        "onDebugDynamicConfigurations:gzdoom",
+        "onLanguage:zscript",
+        "onLanguage:acs",
+        "onLanguage:decorate"
     ],
     "contributes": {
         "languages": [
@@ -756,6 +813,44 @@
                 "language": "sndseq",
                 "scopeName": "source.sndseq",
                 "path": "./syntaxes/sndseq.tmLanguage.json"
+            }
+        ],
+        "breakpoints": [
+            {
+                "language": "zscript"
+            },
+            {
+                "language": "acs"
+            },
+            {
+                "language": "decorate"
+            }
+        ],
+        "debuggers": [
+            {
+                "type": "gzdoom",
+                "label": "GZDoom",
+                "configurationAttributes": {
+                    "attach": {
+                        "properties": {
+                            "port": {
+                                "type": "number",
+                                "description": "Port to attach to",
+                                "default": 19021
+                            },
+                            "projectPath": {
+                                "type": "string",
+                                "description": "Root folder of the project",
+                                "default": "${workspaceFolder}"
+                            },
+                            "projectArchive": {
+                                "type": "string",
+                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.)",
+                                "default": "project.pk3"
+                            }
+                        }
+                    }
+                }
             }
         ]
     },
