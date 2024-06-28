@@ -665,6 +665,9 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
             throw new Error('handleMessageFromClient is undefined');
         }
         this.log(this.logClientToProxy, { message }, '---CLIENT->PROXY:');
+        if ((message as DAP.ProtocolMessage)?.type === 'request' && (message as DAP.Request)?.command === 'initialize') {
+            this.setClientCapabilities((message as DAP.InitializeRequest).arguments);
+        }
         this.handleMessageFromClient(message as DAP.ProtocolMessage);
     }
 
