@@ -820,9 +820,6 @@
                 "language": "zscript"
             },
             {
-                "language": "acs"
-            },
-            {
                 "language": "decorate"
             }
         ],
@@ -832,7 +829,6 @@
 
                 "languages":[
                     "zscript",
-                    "acs",
                     "decorate"
                 ],
                 "label": "GZDoom",
