@@ -2,8 +2,13 @@
 /* eslint-disable no-prototype-builtins */
 import { DebugProtocol as DAP } from '@vscode/debugprotocol';
 import * as path from 'path';
-import { DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
+import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
+import * as vscode from 'vscode';
+
+if (vscode) {
+    vscode;
+}
 
 export enum ErrorDestination {
     User = 1,
@@ -12,7 +17,7 @@ export enum ErrorDestination {
 
 export interface GZDoomDebugAdapterProxyOptions extends DebugAdapterProxyOptions {
     projectPath?: string;
-    projectArchive?: string;
+    projectArchive: string;
 }
 
 type responseCallback = (response: DAP.Response, request: DAP.Request) => void;
@@ -34,6 +39,15 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     private _pendingRequestsMap = new Map<number, pendingRequest>();
     private projectPath: string = '';
     private projectArchive: string | undefined = undefined;
+    private onFinishedScanning = new vscode.EventEmitter<number | null>();
+    private done_scanning_project = false;
+    private launch_request_sent = false;
+    private onSentLaunchRequest = new vscode.EventEmitter<number | null>();
+    // Set of strings
+    private sourcePaths: Set<string> = new Set();
+    private logServerToProxyReal: DAPLogLevel = 'info';
+
+    private projectOrigin = '';
     // object name to source map
     constructor(options: GZDoomDebugAdapterProxyOptions) {
         const logdir = path.join(
@@ -47,12 +61,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         options.logdir = options.logdir || logdir;
         options.debuggerLocale = GZDOOM_DAP_LOCALE;
         super(options);
-        this.projectPath = options.projectPath || '';
+        this.projectPath = options.projectPath || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        this.scanProjectDirectoryForFiles(options.projectPath!);
         this.projectArchive = options.projectArchive;
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';
-        this.logServerToProxy = 'info'; // we take care of this ourselves
+        this.logServerToProxy = 'silent'; // we take care of this ourselves
+        this.logServerToProxyReal = 'info';
         this.logProxyToClient = 'trace';
         this.projectArchive;
     }
@@ -67,7 +83,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             // The callbacks should handle all the responses we need to translate into the expected response objects
             if (pending) {
                 if (!pending.noLogResponse) {
-                    this.log(this.logServerToProxy, { message }, '---SERVER->PROXY:');
+                    this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
                 }
                 this._pendingRequestsMap.delete(response.request_seq);
                 pending.cb(response, pending.request);
@@ -80,6 +96,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             const event = message as DAP.Event;
             if (event.event == 'output') {
                 this.handleOutputEvent(event as DAP.OutputEvent);
+            } else if (event.event == 'loadedSource') {
+                const response = event as DAP.LoadedSourceEvent;
+                response.body.source = this.convertDebuggerSourceToClient(response.body.source as DAP.Source);
+                this.sendMessageToClient(response);
             } else {
                 this.sendMessageToClient(event);
             }
@@ -179,23 +199,96 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         });
     }
 
+    protected async scanProjectDirectoryForFiles(projectDirectory: string) {
+        // these types of files:
+        // (ext == ".zs" || ext == ".zsc" || ext == ".zc" || ext == ".acs" || ext == ".dec")
+        // also files named exactly this:
+        // (entry.path().filename() == "DECORATE" || entry.path().filename() == "ACS")
+        const file_glob = '**/*.{zs,zsc,zc,acs,dec}';
+        // load the project directory
+        const thing = await vscode.workspace.findFiles(file_glob, '**/node_modules/**', 100000);
+        const decorates = await vscode.workspace.findFiles('**/DECORATE', '**/node_modules/**', 100000);
+        const acs = await vscode.workspace.findFiles('**/ACS', '**/node_modules/**', 100000);
+        const combined = thing.concat(decorates).concat(acs);
+        this.sourcePaths = new Set(combined.map((uri) => uri.fsPath));
+        this.done_scanning_project = true;
+        this.onFinishedScanning.fire(null);
+    }
+
+    protected handleLaunchRequest(request: DAP.LaunchRequest): void {
+        this.clearExecutionState();
+        this.handleLaunchOrAttach(request);
+    }
+    protected handleAttachRequest(request: DAP.AttachRequest): void {
+        this.clearExecutionState();
+        this.handleLaunchOrAttach(request);
+    }
+    private handleLaunchOrAttach(request: DAP.Request): void {
+        if (!this.connected) {
+            this._socket?.once('connect', () => {
+                this.handleLaunchOrAttach(request);
+            });
+            return;
+        }
+        if (!this.done_scanning_project) {
+            this.onFinishedScanning.event(() => {
+                this.handleLaunchOrAttach(request);
+            });
+            return;
+        }
+
+
+
+        request.arguments.projectSources = Array.from(this.sourcePaths).map((sourcePath) => {
+            return this.convertClientSourceToDebugger({
+                name: path.basename(sourcePath),
+                // make sure path is relative to the workspace folder
+                path: sourcePath,
+                origin: this.projectArchive,
+            } as DAP.Source);
+        });
+        // send it on
+        this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
+            this._defaultResponseHandler(r);
+        });
+        //now, convert all the sourcepaths to lowercase, as all this will be used for now is to check if a source is in the set
+        this.sourcePaths = new Set(Array.from(this.sourcePaths).map((sourcePath) => sourcePath.toLowerCase()));
+        this.launch_request_sent = true;
+        this.onSentLaunchRequest.fire(null);
+    }
+
     protected handleClientRequest(request: DAP.Request): void {
         try {
-            if (request.command === 'setBreakpoints') {
-                this.handleSetBreakpointsRequest(<DAP.SetBreakpointsRequest>request);
-            } else if (request.command === 'stackTrace') {
-                this.handleStackTraceRequest(<DAP.StackTraceRequest>request);
-            } else if (request.command === 'scopes') {
-                this.handleScopesRequest(<DAP.ScopesRequest>request);
-            } else if (request.command === 'source') {
-                this.handleSourceRequest(<DAP.SourceRequest>request);
-            } else if (request.command === 'disconnect') {
-                this.handleDisconnectRequest(<DAP.DisconnectRequest>request);
-                // loaded sources request
-            } else if (request.command === 'loadedSources') {
-                this.handleLoadedSourcesRequest(<DAP.LoadedSourcesRequest>request);
+
+            if (request.command === 'launch') {
+                this.handleLaunchRequest(<DAP.LaunchRequest>request);
+            } else if (request.command === 'attach') {
+                this.handleAttachRequest(<DAP.AttachRequest>request);
             } else {
-                this.handleRequestDefault(request);
+                if (request.command != 'initialize' && !this.launch_request_sent) {
+                    this.onSentLaunchRequest.event(() => {
+                        this.handleClientRequest(request);
+                    });
+                    return;
+                }
+                if (request.command === 'setBreakpoints') {
+                    this.handleSetBreakpointsRequest(<DAP.SetBreakpointsRequest>request);
+                } else if (request.command === 'stackTrace') {
+                    this.handleStackTraceRequest(<DAP.StackTraceRequest>request);
+                } else if (request.command === 'scopes') {
+                    this.handleScopesRequest(<DAP.ScopesRequest>request);
+                } else if (request.command === 'source') {
+                    this.handleSourceRequest(<DAP.SourceRequest>request);
+                } else if (request.command === 'disconnect') {
+                    this.handleDisconnectRequest(<DAP.DisconnectRequest>request);
+                    // loaded sources request
+                } else if (request.command === 'loadedSources') {
+                    this.handleLoadedSourcesRequest(<DAP.LoadedSourcesRequest>request);
+                } else if (request.command === 'disassemble') {
+                    this.handleDisassembleRequest(<DAP.DisassembleRequest>request);
+                } else {
+                    this.handleRequestDefault(request);
+                }
             }
         } catch (e) {
             this.sendErrorResponse(new Response(request), 1104, '{_stack}', e, ErrorDestination.Telemetry);
@@ -217,6 +310,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     }
 
     protected handleSetBreakpointsRequest(request: DAP.SetBreakpointsRequest): void {
+        request.arguments.source = this.convertClientSourceToDebugger(request.arguments.source as DAP.Source);
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
             this.handleSetBreakpointsResponse(r as DAP.SetBreakpointsResponse, req as DAP.SetBreakpointsRequest);
         });
@@ -244,7 +338,12 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     // We shouldn't get these; if we do, we screwed up somewhere.'
     // In either case, gzdoom doesn't respond to them
     protected handleSourceRequest(request: DAP.SourceRequest): void {
-        this.sendErrorResponse(new Response(request), 1015, 'SOURCE REQUEST?!?!?!?!?', null, ErrorDestination.User);
+        if (request.arguments.source) {
+            request.arguments.source = this.convertClientSourceToDebugger(request.arguments.source as DAP.Source);
+        }
+        this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
+            this._defaultResponseHandler(r);
+        });
     }
 
 
@@ -272,6 +371,20 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             for (const scope of response.body.scopes) {
                 if (scope.source) {
                     scope.source = this.convertDebuggerSourceToClient(scope.source);
+                }
+            }
+            this.sendMessageToClient(response);
+        });
+    }
+
+    protected handleDisassembleRequest(request: DAP.DisassembleRequest): void {
+        this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
+            const response = r as DAP.DisassembleResponse;
+            if (response.body?.instructions) {
+                for (const instr of response.body?.instructions) {
+                    if (instr.location) {
+                        instr.location = this.convertDebuggerSourceToClient(instr.location);
+                    }
                 }
             }
             this.sendMessageToClient(response);
@@ -385,13 +498,38 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, _req) => this._defaultResponseHandler(r));
     }
 
-    private convertDebuggerSourceToClient(Source: DAP.Source): DAP.Source {
-        // TODO: make this only apply to the sources in the workspace folder
+    private convertClientSourceToDebugger(Source: DAP.Source): DAP.Source {
         // change the source path to add the workspace folder
-        if (Source.path && !path.isAbsolute(Source.path)) {
-            Source.path = path.join(this.projectPath, Source.path);
-            Source.path = this.convertDebuggerPathToClient(Source.path);
+        if (!Source.path) {
+            return Source;
         }
+        Source.path = this.convertClientPathToDebugger(Source.path);
+        let new_path = path.isAbsolute(Source.path) ? path.relative(this.projectPath, Source.path) : Source.path;
+        if (new_path.startsWith('..') || path.isAbsolute(new_path)) {
+            new_path = Source.path;
+        }
+        Source.path = new_path;
+        if (!Source.origin) {
+            Source.origin = this.projectArchive;
+        }
+        return Source;
+    }
+
+    private convertDebuggerSourceToClient(Source: DAP.Source): DAP.Source {
+        if (!Source.path) {
+            return Source
+        }
+        let new_path = Source.path;
+        if (Source.path && !path.isAbsolute(Source.path)) {
+            new_path = path.join(this.projectPath, Source.path);
+        }
+        // check if it's in the set of source paths
+        if (!this.sourcePaths.has(new_path.toLowerCase())) {
+            Source.path = this.convertDebuggerPathToClient(Source.path);
+            return Source;
+        }
+        Source.path = this.convertDebuggerPathToClient(new_path);
+
         Source.sourceReference = 0;
         return Source;
     }

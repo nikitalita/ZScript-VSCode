@@ -827,7 +827,14 @@
         "debuggers": [
             {
                 "type": "gzdoom",
+
+                "languages":[
+                    "zscript",
+                    "acs",
+                    "decorate"
+                ],
                 "label": "GZDoom",
+                "runtime": "node",
                 "configurationAttributes": {
                     "attach": {
                         "properties": {
@@ -848,7 +855,23 @@
                             }
                         }
                     }
-                }
+                },
+                "configurationSnippets": [
+                    {
+                      "label": "GZDoom: Attach",
+                      "description": "Debug the current GZDoom project",
+                      "body": {
+                        "type": "gzdoom",
+                        "name": "gzdoom Attach",
+                        "request": "attach",
+                        "port": 19021,
+                        "projectPath": "${workspaceFolder}",
+                        "projectArchive": "project.pk3"
+                      }
+                    }
+                    
+                ]
+          
             }
         ]
     },

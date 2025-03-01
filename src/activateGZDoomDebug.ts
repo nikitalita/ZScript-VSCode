@@ -58,7 +58,6 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 	 * e.g. add all missing attributes to the debug configuration.
 	 */
 	resolveDebugConfiguration(folder: WorkspaceFolder | undefined, config: DebugConfiguration, token?: CancellationToken): ProviderResult<DebugConfiguration> {
-
 		// if launch.json is missing or empty
 		if (!config.type && !config.request && !config.name) {
 			const editor = vscode.window.activeTextEditor;
@@ -70,6 +69,9 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 				config.projectPath = '${workspaceFolder}';
 				config.projectArchive = 'project.pk3';
 			}
+		}
+		if (!config.projectArchive) {
+			throw new Error("'projectArchive' is required");
 		}
 		return config;
 	}
