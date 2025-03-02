@@ -34,6 +34,101 @@ const GZDOOM_DAP_LOCALE = {
     pathsAreURIs: false,
 };
 const DEFAULT_TIMEOUT = 1000000;
+
+class CustomSet<T> implements Set<T> {
+    private items: T[] = [];
+    private comparator: (a: T, b: T) => boolean;
+    constructor(comparator, iterable?: Iterable<T>) {
+        // instance a Comparator object
+        this.comparator = comparator || ((a, b) => a === b);
+        for (const item of iterable || []) {
+            this.add(item);
+        }
+    }
+
+
+    add(item: T): this {
+        if (!this.has(item)) {
+            this.items.push(item);
+        }
+        return this;
+    }
+
+    has(item: T): boolean {
+        return this.items.some(existingItem => this.comparator(item, existingItem));
+    }
+
+    get(item: T): T | undefined {
+        return this.items.find(existingItem => this.comparator(item, existingItem));
+    }
+
+    delete(item: T): boolean {
+        const index = this.items.findIndex(existingItem => this.comparator(item, existingItem));
+        if (index > -1) {
+            this.items.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
+
+    get size(): number {
+        return this.items.length;
+    }
+
+    clear(): void {
+        this.items = [];
+    }
+
+    [Symbol.iterator](): SetIterator<T> {
+        return this.items[Symbol.iterator]();
+    }
+
+    [Symbol.toStringTag]: string = 'CustomSet';
+
+    forEach(callbackfn: (value: T, value2: T, set: Set<T>) => void, thisArg?: any): void {
+        this.items.forEach(item => callbackfn.call(thisArg, item, item, this));
+    }
+
+    entries(): SetIterator<[T, T]> {
+        return this.items.entries() as SetIterator<[T, T]>;
+    }
+
+    keys(): SetIterator<T> {
+        return this.items.keys() as SetIterator<T>;
+    }
+
+    values(): SetIterator<T> {
+        return this.items.values() as SetIterator<T>;
+    }
+}
+
+class ICaseSet extends CustomSet<string> {
+    constructor(iterable?: Iterable<string>) {
+        super((a, b) => a.toLowerCase() === b.toLowerCase(), iterable);
+    }
+}
+
+
+// Usage example
+
+// interface Set<T> {
+//     /** Iterates over values in the set. */
+//     [Symbol.iterator](): SetIterator<T>;
+//     /**
+//      * Returns an iterable of [v,v] pairs for every value `v` in the set.
+//      */
+//     entries(): SetIterator<[T, T]>;
+//     /**
+//      * Despite its name, returns an iterable of the values in the set.
+//      */
+//     keys(): SetIterator<T>;
+
+//     /**
+//      * Returns an iterable of values in the set.
+//      */
+//     values(): SetIterator<T>;
+// }
+
 export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     private _pendingRequestsMap = new Map<number, pendingRequest>();
@@ -44,7 +139,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     private launch_request_sent = false;
     private onSentLaunchRequest = new vscode.EventEmitter<number | null>();
     // Set of strings
-    private sourcePaths: Set<string> = new Set();
+    private sourcePaths: ICaseSet = new ICaseSet([]);
     private logServerToProxyReal: DAPLogLevel = 'info';
 
     private projectOrigin = '';
@@ -210,7 +305,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         const decorates = await vscode.workspace.findFiles('**/DECORATE', '**/node_modules/**', 100000);
         const acs = await vscode.workspace.findFiles('**/ACS', '**/node_modules/**', 100000);
         const combined = thing.concat(decorates).concat(acs);
-        this.sourcePaths = new Set(combined.map((uri) => uri.fsPath));
+        this.sourcePaths = new ICaseSet(combined.map((uri) => uri.fsPath));
         this.done_scanning_project = true;
         this.onFinishedScanning.fire(null);
     }
@@ -251,8 +346,6 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
             this._defaultResponseHandler(r);
         });
-        //now, convert all the sourcepaths to lowercase, as all this will be used for now is to check if a source is in the set
-        this.sourcePaths = new Set(Array.from(this.sourcePaths).map((sourcePath) => sourcePath.toLowerCase()));
         this.launch_request_sent = true;
         this.onSentLaunchRequest.fire(null);
     }
@@ -520,16 +613,17 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             return Source
         }
         let new_path = Source.path;
-        if (Source.path && !path.isAbsolute(Source.path)) {
+        if (Source.path && !path.isAbsolute(Source.path) && Source.origin?.toLowerCase() == this.projectArchive?.toLowerCase()) {
             new_path = path.join(this.projectPath, Source.path);
         }
         // check if it's in the set of source paths
-        if (!this.sourcePaths.has(new_path.toLowerCase())) {
+        var ourPath = this.sourcePaths.get(new_path);
+        if (!ourPath) {
             Source.path = this.convertDebuggerPathToClient(Source.path);
             return Source;
         }
-        Source.path = this.convertDebuggerPathToClient(new_path);
-
+        Source.path = this.convertDebuggerPathToClient(ourPath);
+        Source.name = path.basename(ourPath);
         Source.sourceReference = 0;
         return Source;
     }
