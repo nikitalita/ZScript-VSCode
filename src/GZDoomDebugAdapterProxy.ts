@@ -234,7 +234,11 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         super(options);
         this.projectPath = options.projectPath || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
         this.scanProjectDirectoryForFiles(options.projectPath!);
-        this.projectArchive = options.projectArchive;
+        // get the base name of the project archive
+        if (!options.projectArchive) {
+            throw new Error('projectArchive is required');
+        }
+        this.projectArchive = path.basename(options.projectArchive);
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';

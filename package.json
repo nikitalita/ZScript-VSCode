@@ -39,10 +39,12 @@
         "glob": "^7.2.0",
         "mocha": "^9.2.2",
         "path-browserify": "^1.0.1",
+        "ps-list": "^6.3.0",
         "rimraf": "^3.0.2",
         "typescript": "^4.6.3",
         "url": "^0.11.0",
-        "vsce": "^2.7.0"
+        "vsce": "^2.7.0",
+        "wait-port": "^1.1.0"
     },
     "dependencies": {
         "@types/lodash.get": "^4.4.9",
@@ -850,6 +852,53 @@
                                 "default": "project.pk3"
                             }
                         }
+                    },
+                    "launch": {
+                        "properties": {
+                            "gzdoomPath": {
+                                "type": "string",
+                                "description": "Path to the GZDoom executable"
+                            },
+                            "port": {
+                                "type": "number",
+                                "description": "Port to attach to",
+                                "default": 19021
+                            },
+                            "projectPath": {
+                                "type": "string",
+                                "description": "Root folder of the project",
+                                "default": "${workspaceFolder}"
+                            },
+                            "projectArchive": {
+                                "type": "string",
+                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.)"
+                            },
+                            "iwad":{
+                                "type": "string",
+                                "description": "Path to the IWAD to use"
+                            },
+                            "configPath": {
+                                "type": "string",
+                                "description": "Path to the config file to use",
+                                "default": ""
+                            },
+                            "map": {
+                                "type": "string",
+                                "description": "Map to start on",
+                                "default": ""
+                            },
+                            "additionalArgs": {
+                                "type": "array",
+                                "description": "Additional arguments to pass to GZDoom",
+                                "default": []
+                            },
+                            "cwd": {
+                                "type": "string",
+                                "description": "Working directory to use",
+                                "default": "${workspaceFolder}"
+                            }
+
+                        }
                     }
                 },
                 "configurationSnippets": [
@@ -863,6 +912,24 @@
                         "port": 19021,
                         "projectPath": "${workspaceFolder}",
                         "projectArchive": "project.pk3"
+                      }
+                    },
+                    {
+                      "label": "GZDoom: Launch",
+                      "description": "Launch current GZDoom project",
+                      "body": {
+                          "type": "gzdoom",
+                          "name": "gzdoom Launch",
+                          "request": "launch",
+                          "gzdoomPath": "C:/Program Files/GZDoom/gzdoom.exe",
+                          "port": 19021,
+                          "projectPath": "${workspaceFolder}",
+                          "projectArchive": "project.pk3",
+                          "iwad": "doom2.wad",
+                          "configPath": "",
+                          "map": "",
+                          "additionalArgs": [],
+                          "cwd": "${workspaceFolder}"
                       }
                     }
                     

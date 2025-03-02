@@ -15,6 +15,7 @@ import { default as split } from 'split2';
 import { Event } from '@vscode/debugadapter';
 import * as url from 'url';
 import { default as colorizer } from './colorizer';
+import { ChildProcess } from 'child_process';
 
 // import { DebugConfiguration } from 'vscode';
 export interface DebugConfiguration {
@@ -205,6 +206,12 @@ export interface DebugAdapterProxyOptions extends DebugConfiguration {
      * }
      */
     debuggerLocale?: DebuggerLocale;
+
+    /**
+     * launcherProcess
+     * The executable that was launched
+     */
+    launcherProcess?: ChildProcess
 }
 
 // these are the ones we care about, so we make them mandatory
@@ -260,7 +267,20 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected readonly logStream: stream.PassThrough;
     protected clientCaps: ClientCapabilities;
     protected debuggerLocale: DebuggerLocale;
+    protected launcherProcess?: ChildProcess
     constructor(options: DebugAdapterProxyOptions) {
+        this.launcherProcess = options.launcherProcess;
+        // this.launcherProcess?.stderr?.on('data', (data) => {
+        //     this.logerror(data.toString());
+        // });
+        // this.launcherProcess?.stdout?.on('data', (data) => {
+        //     this.loginfo(data.toString());
+        // });
+        this.launcherProcess?.addListener('exit', (code) => {
+            this.loginfo(`Launcher process exited with code ${code}`);
+            this.emitExit(code);
+            this.stop();
+        });
         this.port = options.port;
         this.host = options.host || 'localhost';
         this.consoleLogLevel = options.consoleLogLevel || this.consoleLogLevel;

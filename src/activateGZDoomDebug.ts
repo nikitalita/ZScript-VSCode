@@ -10,6 +10,11 @@
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
+import { DebugLauncherService, DebugLaunchState } from './DebugLauncherService';
+import { DEFAULT_PORT } from './GZDoomGame';
+import path from 'path';
+
+const debugLauncherService = new DebugLauncherService();
 export interface FileAccessor {
 	isWindows: boolean;
 	readFile(path: string): Promise<Uint8Array>;
@@ -31,9 +36,23 @@ export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 					type: 'gzdoom',
 					name: 'gzdoom Attach',
 					request: 'attach',
-					port: 19021,
+					port: DEFAULT_PORT,
 					projectPath: '${workspaceFolder}',
 					projectArchive: 'project.pk3'
+				},
+				{
+					type: 'gzdoom',
+					name: 'gzdoom Launch',
+					request: 'launch',
+					gzdoomPath: "C:/Program Files/GZDoom/gzdoom.exe",
+					cwd: '${workspaceFolder}',
+					port: DEFAULT_PORT,
+					projectPath: '${workspaceFolder}',
+					projectArchive: 'project.pk3',
+					iwad: 'doom2.wad',
+					configPath: '',
+					map: '',
+					additionalArgs: []
 				}
 
 			];
@@ -65,7 +84,7 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 				config.type = 'gzdoom';
 				config.name = 'Attach';
 				config.request = 'attach';
-				config.port = 19021;
+				config.port = DEFAULT_PORT;
 				config.projectPath = '${workspaceFolder}';
 				config.projectArchive = 'project.pk3';
 			}
@@ -102,15 +121,87 @@ function pathToUri(path: string) {
 	}
 }
 
-class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+const noopExecutable = new vscode.DebugAdapterExecutable('node', ['-e', '""']);
 
-	createDebugAdapterDescriptor(_session: vscode.DebugSession): ProviderResult<vscode.DebugAdapterDescriptor> {
+class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+	async ensureGameRunning() {
+		if (!(await debugLauncherService.getGameIsRunning())) {
+			const selectedGameRunningOption = await vscode.window.showWarningMessage(
+				`Make sure that gzdoom is running and is either in-game or at the main menu.`,
+				'Continue',
+				'Cancel'
+			);
+
+			if (selectedGameRunningOption !== 'Continue') {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
 		const options = _session.configuration as GZDoomDebugAdapterProxyOptions;
 		if (!options.projectPath) {
 			options.projectPath = _session.workspaceFolder?.uri.fsPath;
 		}
 		options.startNow = true;
 		options.consoleLogLevel = 'info';
+		let launched: DebugLaunchState = DebugLaunchState.success;
+		if (options.request === 'launch') {
+			// check relative path
+			if (!path.isAbsolute(options.projectArchive)) {
+				options.projectArchive = path.join(options.cwd, options.projectArchive);
+			}
+			// check if options.projectArchive exists
+			if (!await workspaceFileAccessor.readFile(options.projectArchive)) {
+				vscode.window.showErrorMessage(`Project archive path '${options.projectArchive}' does not exist.`);
+				_session.configuration.noop = true;
+				return noopExecutable;
+			}
+			const launchCommand = debugLauncherService.getLaunchCommand(
+				options.gzdoomPath,
+				options.iwad,
+				[options.projectArchive],
+				options.port,
+				options.map,
+				options.configPath,
+				options.additionalArgs,
+				options.cwd
+			);
+			const cancellationSource = new vscode.CancellationTokenSource();
+			const cancellationToken = cancellationSource.token;
+			const port = options.port || DEFAULT_PORT;
+			const wait_message = vscode.window.setStatusBarMessage(
+				`Waiting for gzdoom to start...`,
+				30000
+			);
+			await debugLauncherService.runLauncher(launchCommand, port, cancellationToken);
+			wait_message.dispose();
+		}
+		if (launched != DebugLaunchState.success) {
+			if (launched === DebugLaunchState.cancelled) {
+				_session.configuration.noop = true;
+				return noopExecutable;
+			}
+			if (launched === DebugLaunchState.multipleGamesRunning) {
+				const errMessage = `Multiple gzdoom instances are running, shut them down and try again.`;
+				vscode.window.showErrorMessage(errMessage);
+			}
+			// throw an error indicating the launch failed
+			throw new Error(`'gzdoom' failed to launch.`);
+			// attach
+		} else if (!(await this.ensureGameRunning())) {
+			_session.configuration.noop = true;
+			return noopExecutable;
+		}
+
+		var config = options as GZDoomDebugAdapterProxyOptions;
+		config.launcherProcess = debugLauncherService.launcherProcess;
+
+		// wait 5 seconds for the game to start
+		await new Promise(resolve => setTimeout(resolve, 5000));
+
 		return new vscode.DebugAdapterInlineImplementation(
 			new GZDoomDebugAdapterProxy(_session.configuration as GZDoomDebugAdapterProxyOptions)
 		);
