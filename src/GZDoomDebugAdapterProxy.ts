@@ -5,6 +5,8 @@ import * as path from 'path';
 import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
 import * as vscode from 'vscode';
+import { default as colorizer } from './colorizer';
+import * as chalk_d from 'chalk';
 
 if (vscode) {
     vscode;
@@ -34,6 +36,100 @@ const GZDOOM_DAP_LOCALE = {
     pathsAreURIs: false,
 };
 const DEFAULT_TIMEOUT = 1000000;
+
+const TEXTCOLOR_ESCAPE = '\x1c';
+
+const colorCodeToHexMap = {
+    "A": '#A52A2A', // BRICK
+    "B": '#D2B48C', // TAN
+    "C": '#808080', // GRAY
+    "D": '#008000', // GREEN
+    "E": '#A52A2A', // BROWN
+    "F": '#FFD700', // GOLD
+    "G": '#FF0000', // RED
+    "H": '#0000FF', // BLUE
+    "I": '#FFA500', // ORANGE
+    "J": '#FFFFFF', // WHITE
+    "K": '#FFFF00', // YELLOW
+    "L": '#808080', // UNTRANSLATED
+    "M": '#000000', // BLACK
+    "N": '#ADD8E6', // LIGHTBLUE
+    "O": '#FFFDD0', // CREAM
+    "P": '#808000', // OLIVE
+    "Q": '#006400', // DARKGREEN
+    "R": '#8B0000', // DARKRED
+    "S": '#654321', // DARKBROWN
+    "T": '#800080', // PURPLE
+    "U": '#A9A9A9', // DARKGRAY
+    "V": '#00FFFF', // CYAN
+    "W": '#F0FFFF', // ICE
+    "X": '#FF4500', // FIRE
+    "Y": '#0F52BA', // SAPPHIRE
+    "Z": '#008080'  // TEAL
+}
+const TEXTCOLOR_NORMAL = "-";
+const TEXTCOLOR_BOLD = "+";
+const TEXTCOLOR_CHAT = "*";
+const TEXTCOLOR_TEAMCHAT = "!";
+
+const chalk: chalk_d.ChalkInstance = chalk_d.default.constructor({ enabled: true, level: 2 });
+
+// The color remains the same until a new color is set
+// for each range of characters between color codes, we need to create a colorized string and append it to the result
+function colorize_log_output(value: string) {
+    let result = '';
+    let currentColor = '#F0FFFF';
+    let currentBold = false;
+    let currentChat = false;
+    let currentTeamChat = false;
+
+    // Split the string by color codes
+    const parts = value.split(TEXTCOLOR_ESCAPE);
+    if (parts.length <= 1) {
+        return chalk.hex(currentColor)(value);
+    }
+    if (parts[0].length !== 0) {
+        // default color, pop it off
+        result += chalk.hex(currentColor)(parts.shift());
+    } else {
+        parts.shift();
+    }
+    for (const part of parts) {
+        if (part.length === 0) {
+            continue;
+        }
+
+        // Check if the part starts with a color code
+        const colorCode = part[0].toUpperCase();
+        if (colorCode in colorCodeToHexMap) {
+            // Set the new color
+            currentColor = colorCodeToHexMap[colorCode];
+        } else if (colorCode === TEXTCOLOR_NORMAL) {
+            // Reset to default color
+            currentBold = false;
+        } else if (colorCode === TEXTCOLOR_BOLD) {
+            // Toggle bold
+            currentBold = true;
+        } else if (colorCode === TEXTCOLOR_CHAT) {
+            // Toggle chat mode
+            currentChat = true;
+            currentTeamChat = false;
+        } else if (colorCode === TEXTCOLOR_TEAMCHAT) {
+            // Toggle team chat mode
+            currentTeamChat = true;
+            currentChat = false;
+        }
+        var new_str = chalk.hex(currentColor)(part.slice(1));
+        if (currentBold) {
+            new_str = chalk.bold(new_str);
+        }
+        result += new_str;
+    }
+
+    return result;
+}
+
+
 
 class CustomSet<T> implements Set<T> {
     private items: T[] = [];
@@ -108,26 +204,6 @@ class ICaseSet extends CustomSet<string> {
     }
 }
 
-
-// Usage example
-
-// interface Set<T> {
-//     /** Iterates over values in the set. */
-//     [Symbol.iterator](): SetIterator<T>;
-//     /**
-//      * Returns an iterable of [v,v] pairs for every value `v` in the set.
-//      */
-//     entries(): SetIterator<[T, T]>;
-//     /**
-//      * Despite its name, returns an iterable of the values in the set.
-//      */
-//     keys(): SetIterator<T>;
-
-//     /**
-//      * Returns an iterable of values in the set.
-//      */
-//     values(): SetIterator<T>;
-// }
 
 export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
@@ -219,6 +295,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         // The output messages don't have newlines, so just append one.
         // TODO: something with the rest of the fields?
         message.body.output += '\n';
+        message.body.output = colorize_log_output(message.body.output);
         this.sendMessageToClient(message);
     }
 
