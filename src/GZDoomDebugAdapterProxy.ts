@@ -274,11 +274,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             } else if (event.event == 'loadedSource') {
                 const response = event as DAP.LoadedSourceEvent;
                 response.body.source = this.convertDebuggerSourceToClient(response.body.source as DAP.Source);
+                this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
                 this.sendMessageToClient(response);
             } else {
+                this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
                 this.sendMessageToClient(event);
             }
         } else {
+            this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
             this.sendMessageToClient(message);
         }
     }
