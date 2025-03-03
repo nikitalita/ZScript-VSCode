@@ -199,9 +199,6 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 		var config = options as GZDoomDebugAdapterProxyOptions;
 		config.launcherProcess = debugLauncherService.launcherProcess;
 
-		// wait 5 seconds for the game to start
-		await new Promise(resolve => setTimeout(resolve, 5000));
-
 		return new vscode.DebugAdapterInlineImplementation(
 			new GZDoomDebugAdapterProxy(_session.configuration as GZDoomDebugAdapterProxyOptions)
 		);

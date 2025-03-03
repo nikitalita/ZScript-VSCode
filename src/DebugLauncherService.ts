@@ -241,18 +241,18 @@ export class DebugLauncherService implements IDebugLauncherService {
                 return DebugLaunchState.gameFailedToStart;
             } else {
                 // DAP server is interpreting the port probing as a connection, disabling for now
-                // result = (
-                //     await waitPort({
-                //         host: 'localhost',
-                //         port: port,
-                //         timeout: 1000,
-                //         interval: 1000,
-                //         output: 'silent',
-                //     })
-                // ).open;
-                // if (result) {
-                //     break;
-                // }
+                result = (
+                    await waitPort({
+                        host: 'localhost',
+                        port: port,
+                        timeout: 1000,
+                        interval: 1000,
+                        output: 'silent',
+                    })
+                ).open;
+                if (result) {
+                    break;
+                }
             }
         }
         return result ? DebugLaunchState.success : DebugLaunchState.gameFailedToStart;
