@@ -129,7 +129,7 @@ export class DebugLauncherService implements IDebugLauncherService {
             args.push('-config', gzdoomIniPath);
         }
         if (map) {
-            args.push('-warp', map);
+            args.push('+map', map);
         }
         if (gzdoomArgs) {
             args.push(...gzdoomArgs);
