@@ -301,7 +301,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     handleOutputEvent(message: DAP.OutputEvent) {
         // The output messages don't have newlines, so just append one.
         // TODO: something with the rest of the fields?
-        message.body.output += '\n';
+        // if it doesn't end with a newline, add one
+        if (message.body.output && !message.body.output.endsWith('\n')) {
+            message.body.output += '\n';
+        }
         message.body.output = colorize_log_output(message.body.output);
         this.sendMessageToClient(message);
     }
@@ -450,6 +453,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                 }
                 if (request.command === 'setBreakpoints') {
                     this.handleSetBreakpointsRequest(<DAP.SetBreakpointsRequest>request);
+                } else if (request.command === 'setFunctionBreakpoints' || request.command === 'setExceptionBreakpoints') {
+                    this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, _req) => {
+                        this.handleSetBreakpointsResponse(r, _req);
+                    });
                 } else if (request.command === 'stackTrace') {
                     this.handleStackTraceRequest(<DAP.StackTraceRequest>request);
                 } else if (request.command === 'scopes') {
@@ -495,11 +502,11 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     // They set body.breakpoints[].source argument to a string instead of a source object, need to fix this
     protected handleSetBreakpointsResponse(
-        message: DAP.SetBreakpointsResponse,
-        request: DAP.SetBreakpointsRequest
+        message: DAP.SetBreakpointsResponse | DAP.SetFunctionBreakpointsResponse | DAP.SetExceptionBreakpointsResponse,
+        request?: DAP.Request
     ): void {
-        if (message.body.breakpoints) {
-            message.body.breakpoints.forEach((bp: DAP.Breakpoint) => {
+        if (message.body?.breakpoints) {
+            message.body?.breakpoints.forEach((bp: DAP.Breakpoint) => {
                 if (bp.source) {
                     bp.source = this.convertDebuggerSourceToClient(bp.source as DAP.Source);
                 }
@@ -693,7 +700,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     }
 
     private convertDebuggerSourceToClient(Source: DAP.Source): DAP.Source {
-        if (!Source.path) {
+        if (!Source || !Source.path) {
             return Source
         }
         let new_path = Source.path;
