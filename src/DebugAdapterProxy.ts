@@ -615,6 +615,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         }
         if (!this.outputStream) {
             this.serverMsgQueue.push(message);
+            // On first message, bind a one time listener to the socket to process the queue
             if (this.serverMsgQueue.length == 1) {
                 this._socket?.once('connect', () => {
                     this.processServerMsgQueue();

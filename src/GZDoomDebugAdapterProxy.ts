@@ -1,16 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-prototype-builtins */
-import { DebugProtocol as DAP } from '@vscode/debugprotocol';
+import { DebugProtocol as DAP, } from '@vscode/debugprotocol';
 import * as path from 'path';
 import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
-import * as vscode from 'vscode';
-import { default as colorizer } from './colorizer';
 import * as chalk_d from 'chalk';
-
-if (vscode) {
-    vscode;
-}
+import { WorkspaceFileAccessor, EventEmitterFactory } from './IDEImplementation';
 
 export enum ErrorDestination {
     User = 1,
@@ -19,7 +14,7 @@ export enum ErrorDestination {
 
 export interface GZDoomDebugAdapterProxyOptions extends DebugAdapterProxyOptions {
     projectPath?: string;
-    projectArchive: string;
+    projectArchive?: string;
 }
 
 type responseCallback = (response: DAP.Response, request: DAP.Request) => void;
@@ -210,13 +205,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     private _pendingRequestsMap = new Map<number, pendingRequest>();
     private projectPath: string = '';
     private projectArchive: string | undefined = undefined;
-    private onFinishedScanning = new vscode.EventEmitter<number | null>();
+    private onFinishedScanning = EventEmitterFactory<number | null>();
     private done_scanning_project = false;
     private launch_request_sent = false;
-    private onSentLaunchRequest = new vscode.EventEmitter<number | null>();
+    private onSentLaunchRequest = EventEmitterFactory<number | null>();
     // Set of strings
     private sourcePaths: ICaseSet = new ICaseSet([]);
     private logServerToProxyReal: DAPLogLevel = 'info';
+    private workspaceFileAccessor = new WorkspaceFileAccessor();
 
     private projectOrigin = '';
     // object name to source map
@@ -232,7 +228,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         options.logdir = options.logdir || logdir;
         options.debuggerLocale = GZDOOM_DAP_LOCALE;
         super(options);
-        this.projectPath = options.projectPath || vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        this.projectPath = options.projectPath || this.workspaceFileAccessor.getWorkspaceRoot();
         this.scanProjectDirectoryForFiles(options.projectPath!);
         // get the base name of the project archive
         if (!options.projectArchive) {
@@ -391,11 +387,11 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         // (entry.path().filename() == "DECORATE" || entry.path().filename() == "ACS")
         const file_glob = '**/*.{zs,zsc,zc,acs,dec}';
         // load the project directory
-        const thing = await vscode.workspace.findFiles(file_glob, '**/node_modules/**', 100000);
-        const decorates = await vscode.workspace.findFiles('**/DECORATE', '**/node_modules/**', 100000);
-        const acs = await vscode.workspace.findFiles('**/ACS', '**/node_modules/**', 100000);
+        const thing = await this.workspaceFileAccessor.findFiles(file_glob, '**/node_modules/**', 100000);
+        const decorates = await this.workspaceFileAccessor.findFiles('**/DECORATE', '**/node_modules/**', 100000);
+        const acs = await this.workspaceFileAccessor.findFiles('**/ACS', '**/node_modules/**', 100000);
         const combined = thing.concat(decorates).concat(acs);
-        this.sourcePaths = new ICaseSet(combined.map((uri) => uri.fsPath));
+        this.sourcePaths = new ICaseSet(combined);
         this.done_scanning_project = true;
         this.onFinishedScanning.fire(null);
     }
