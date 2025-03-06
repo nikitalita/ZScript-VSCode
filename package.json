@@ -26,7 +26,7 @@
         "@types/mocha": "^9.1.0",
         "@types/node": "^14.14.37",
         "@types/split2": "^4.2.1",
-        "@types/vscode": "^1.90.0",
+        "@types/vscode": "^1.52.0",
         "@typescript-eslint/eslint-plugin": "^5.17.0",
         "@typescript-eslint/parser": "^5.17.0",
         "@vscode/debugadapter": "^1.56.0",
@@ -848,8 +848,7 @@
                             },
                             "projectArchive": {
                                 "type": "string",
-                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.)",
-                                "default": "project.pk3"
+                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.). Only required if debugging scripts from a package."
                             }
                         }
                     },
@@ -871,7 +870,7 @@
                             },
                             "projectArchive": {
                                 "type": "string",
-                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.)"
+                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.). Only required if debugging scripts from a package."
                             },
                             "iwad":{
                                 "type": "string",
@@ -903,6 +902,22 @@
                 },
                 "configurationSnippets": [
                     {
+                        "label": "GZDoom: Launch",
+                        "description": "Launch current GZDoom project",
+                        "body": {
+                            "type": "gzdoom",
+                            "name": "gzdoom Launch",
+                            "request": "launch",
+                            "gzdoomPath": "C:/Program Files/GZDoom/gzdoom.exe",
+                            "projectPath": "${workspaceFolder}",
+                            "iwad": "doom2.wad",
+                            "configPath": "",
+                            "map": "",
+                            "additionalArgs": [],
+                            "cwd": "${workspaceFolder}"
+                        }
+                    },
+                    {
                       "label": "GZDoom: Attach",
                       "description": "Debug the current GZDoom project",
                       "body": {
@@ -910,31 +925,11 @@
                         "name": "gzdoom Attach",
                         "request": "attach",
                         "port": 19021,
-                        "projectPath": "${workspaceFolder}",
-                        "projectArchive": "project.pk3"
-                      }
-                    },
-                    {
-                      "label": "GZDoom: Launch",
-                      "description": "Launch current GZDoom project",
-                      "body": {
-                          "type": "gzdoom",
-                          "name": "gzdoom Launch",
-                          "request": "launch",
-                          "gzdoomPath": "C:/Program Files/GZDoom/gzdoom.exe",
-                          "port": 19021,
-                          "projectPath": "${workspaceFolder}",
-                          "projectArchive": "project.pk3",
-                          "iwad": "doom2.wad",
-                          "configPath": "",
-                          "map": "",
-                          "additionalArgs": [],
-                          "cwd": "${workspaceFolder}"
+                        "projectPath": "${workspaceFolder}"
                       }
                     }
-                    
                 ]
-          
+
             }
         ]
     },
