@@ -258,9 +258,12 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             // The callbacks should handle all the responses we need to translate into the expected response objects
             if (pending) {
                 if (!pending.noLogResponse) {
-                    this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
+                    this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
                 }
                 this._pendingRequestsMap.delete(response.request_seq);
+                if (response.success === false && this.logRequestOnErrorResponse) {
+                    this.log(this.logServerToProxyReal, this.getLogObj(message), '!!!!FAILED_REQUEST:');
+                }
                 pending.cb(response, pending.request);
                 return;
             }
@@ -274,14 +277,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             } else if (event.event == 'loadedSource') {
                 const response = event as DAP.LoadedSourceEvent;
                 response.body.source = this.convertDebuggerSourceToClient(response.body.source as DAP.Source);
-                this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
+                this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
                 this.sendMessageToClient(response);
             } else {
-                this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
+                this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
                 this.sendMessageToClient(event);
             }
         } else {
-            this.log(this.logServerToProxyReal, { message }, '---SERVER->PROXY:');
+            this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
             this.sendMessageToClient(message);
         }
     }
@@ -453,7 +456,9 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                 }
                 if (request.command === 'setBreakpoints') {
                     this.handleSetBreakpointsRequest(<DAP.SetBreakpointsRequest>request);
-                } else if (request.command === 'setFunctionBreakpoints' || request.command === 'setExceptionBreakpoints') {
+                } else if (request.command === 'setFunctionBreakpoints'
+                    || request.command === 'setExceptionBreakpoints'
+                    || request.command === 'setInstructionBreakpoints') {
                     this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, _req) => {
                         this.handleSetBreakpointsResponse(r, _req);
                     });
@@ -502,7 +507,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     // They set body.breakpoints[].source argument to a string instead of a source object, need to fix this
     protected handleSetBreakpointsResponse(
-        message: DAP.SetBreakpointsResponse | DAP.SetFunctionBreakpointsResponse | DAP.SetExceptionBreakpointsResponse,
+        message: DAP.SetBreakpointsResponse | DAP.SetFunctionBreakpointsResponse | DAP.SetExceptionBreakpointsResponse | DAP.SetInstructionBreakpointsResponse,
         request?: DAP.Request
     ): void {
         if (message.body?.breakpoints) {
@@ -552,7 +557,8 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     protected handleScopesRequest(scopesRequest: DAP.ScopesRequest): void {
         this.sendRequestToServerWithCB(scopesRequest, DEFAULT_TIMEOUT, (r, _req) => {
             const response = r as DAP.ScopesResponse;
-            for (const scope of response.body.scopes) {
+
+            for (const scope of response?.body?.scopes) {
                 if (scope.source) {
                     scope.source = this.convertDebuggerSourceToClient(scope.source);
                 }

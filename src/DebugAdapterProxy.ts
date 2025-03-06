@@ -182,6 +182,11 @@ export interface DebugAdapterProxyOptions extends DebugConfiguration {
     logProxyToServer?: DAPLogLevel;
 
     /**
+     * If true, prints the request that an error response is associated with (default: true)
+     */
+    logRequestOnErrorResponse?: boolean;
+
+    /**
      * The client capabilities
      * default:
      * {
@@ -238,6 +243,98 @@ const DEFAULT_CLIENT_CAPABILITIES: ClientCapabilities = {
     pathsAreURIs: false,
 };
 
+import { DestinationStream, BaseLogger, LogFn } from 'pino';
+// interface LogFn {
+//     // TODO: why is this different from `obj: object` or `obj: any`?
+//     /* tslint:disable:no-unnecessary-generics */
+//     <T extends object>(obj: T, msg?: string, ...args: any[]): void;
+//     (obj: unknown, msg?: string, ...args: any[]): void;
+//     (msg: string, ...args: any[]): void;
+// }
+
+class ConsoleStream implements DestinationStream {
+    public write(msg: string) {
+        console.log(msg);
+    }
+    public log(level: string, obj: any, msg?: string, ...args: any[]) {
+        if (level === 'fatal' || level === 'error' || level === 'warn') {
+            console.error(colorizeMessage(true, msg), ...args);
+            console.error(obj);
+            return;
+        }
+        console.log(colorizeMessage(false, msg), ...args);
+        console.log(obj);
+    }
+
+}
+
+function colorizeMessage(is_error: boolean, message?: string) {
+    if (is_error) {
+        return chalk.hex('#FF0000')(message);
+    }
+    return chalk.hex('#CE9178')(message);
+}
+
+class ConsoleLogger implements BaseLogger {
+    private cstream: ConsoleStream = new ConsoleStream();
+
+    private _log(level: string, obj: any, msg?: string, ...args: any[]): void {
+        this.cstream.log(level, obj, msg, ...args);
+    }
+    constructor() {
+    }
+    public level = 'info';
+
+    // levels go like this: silent, trace, debug, info, warn, error, fatal
+    levelToInt(level: string) {
+        switch (level) {
+            case 'fatal':
+                return 60;
+            case 'error':
+                return 50;
+            case 'warn':
+                return 40;
+            case 'info':
+                return 30;
+            case 'debug':
+                return 20;
+            case 'trace':
+                return 10;
+            case 'silent':
+                return 0;
+            default:
+                return 0;
+        }
+
+
+    }
+    public shouldLog(level: string) {
+        // levels go like this: silent, trace, debug, info, warn, error, fatal
+        return this.levelToInt(level) >= this.levelToInt(this.level);
+    }
+    public fatal(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('fatal')) this._log('fatal', obj, msg, ...args);
+
+    }
+    public error(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('error')) this._log('error', obj, msg, ...args);
+    }
+    public warn(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('warn')) this._log('warn', obj, msg, ...args);
+    }
+    public info(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('info')) this._log('info', obj, msg, ...args);
+    }
+    public debug(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('debug')) this._log('debug', obj, msg, ...args);
+    }
+    public trace(obj: any, msg?: string, ...args: any[]): void {
+        if (this.shouldLog('trace')) this._log('trace', obj, msg, ...args);
+    }
+    public silent(obj: any, msg?: string, ...args: any[]): void {
+    }
+}
+
 export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected connected = false;
     protected outputStream!: stream.Writable;
@@ -254,6 +351,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected logProxyToClient: DAPLogLevel = 'trace';
     protected logServerToProxy: DAPLogLevel = 'debug';
     protected logProxyToServer: DAPLogLevel = 'trace';
+    protected logRequestOnErrorResponse: boolean = true;
     protected consoleLogLevel: DAPLogLevel = 'info';
     protected fileLogLevel: DAPLogLevel = 'trace';
     protected readonly connectionTimeoutLimit = 12000; // the debugger will disconnect after about 20 seconds, so we need to be faster than that
@@ -262,7 +360,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected logFilePath: string;
     protected serverMsgQueue: DAP.ProtocolMessage[] = [];
     protected loggerFile: pino.Logger;
-    protected loggerConsole: pino.Logger;
+    protected loggerConsole: pino.BaseLogger;
     protected logFile: stream.Writable;
     protected readonly logStream: stream.PassThrough;
     protected clientCaps: ClientCapabilities;
@@ -316,7 +414,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         });
         const ppConsoleOpts = {
             colorize: true,
-            colorizeObjects: true,
+            colorizeObjects: false,
             customPrettifiers: {
                 message: (value: any) => {
                     return colorize_message(value);
@@ -327,7 +425,9 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         };
         const pprinterConsole = pino_pretty.default(ppConsoleOpts);
         this.loggerFile = pino({ level: this.fileLogLevel }, pprinterFile);
-        this.loggerConsole = pino({ level: this.consoleLogLevel }, pprinterConsole);
+        // this.loggerConsole = pino({ level: this.consoleLogLevel }, pprinterConsole);
+        // instance of ConsoleLogger
+        this.loggerConsole = new ConsoleLogger();
         if (options.startNow) this.start();
         this.loginfo('Started.');
     }
@@ -468,12 +568,32 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     //override this
     protected handleMessageFromClient?(message: DAP.ProtocolMessage): void;
 
+    protected getLogObj(message: DAP.ProtocolMessage): any {
+        let type = message.type;
+        let obj: any = { type, message };
+        if (message.type === 'response') {
+            let response: string = (message as DAP.Response).command;
+            obj = { response, message };
+        } else if (message.type === 'event') {
+            let event: string = (message as DAP.Event).event;
+            obj = { event, message };
+        } else if (message.type === 'request') {
+            let request: string = (message as DAP.Request).command;
+            obj = { request, message };
+        }
+        return obj;
+    }
+
     protected sendMessageToClient(message: DAP.ProtocolMessage, noLog: boolean = false): void {
+
         if (!noLog) {
+            let type = message.type;
+            let obj: any = this.getLogObj(message);
+
             if (message.type === 'response' && !(message as DAP.Response).success) {
-                this.log('warn', { message }, '***PROXY->CLIENT FAILED RESPONSE:');
+                this.log('warn', obj, '***PROXY->CLIENT FAILED RESPONSE:');
             } else {
-                this.log(this.logProxyToClient, { message }, '***PROXY->CLIENT:');
+                this.log(this.logProxyToClient, obj, '***PROXY->CLIENT:');
             }
         }
         this._sendMessage.fire(message as DebugProtocolMessage);
@@ -491,7 +611,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     // Send message to server
     protected sendMessageToServer(message: DAP.ProtocolMessage, nolog: boolean = false): void {
         if (!nolog) {
-            this.log(this.logProxyToServer, { message }, '***PROXY->SERVER:');
+            this.log(this.logProxyToServer, this.getLogObj(message), '***PROXY->SERVER:');
         }
         if (!this.outputStream) {
             this.serverMsgQueue.push(message);
@@ -532,7 +652,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
                         }
                         try {
                             const message = JSON.parse(msgData);
-                            this.log(this.logServerToProxy, { message }, '---SERVER->PROXY:');
+                            this.log(this.logServerToProxy, this.getLogObj(message), '---SERVER->PROXY:');
                             try {
                                 this.handleMessageFromServer(message);
                             } catch (e) {
@@ -684,7 +804,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         if (!this.handleMessageFromClient) {
             throw new Error('handleMessageFromClient is undefined');
         }
-        this.log(this.logClientToProxy, { message }, '---CLIENT->PROXY:');
+        this.log(this.logClientToProxy, this.getLogObj(message as DAP.ProtocolMessage), '---CLIENT->PROXY:');
         if ((message as DAP.ProtocolMessage)?.type === 'request' && (message as DAP.Request)?.command === 'initialize') {
             this.setClientCapabilities((message as DAP.InitializeRequest).arguments);
         }
