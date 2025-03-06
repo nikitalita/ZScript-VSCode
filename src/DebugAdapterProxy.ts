@@ -12,11 +12,12 @@ import * as pino_pretty from 'pino-pretty';
 import * as chalk_d from 'chalk';
 // import { default as colorizer } from '../../common/colorizer';
 import { default as split } from 'split2';
-import { Event } from '@vscode/debugadapter';
+import { Event } from '@vscode/debugadapter/lib/messages'; // avoid pulling in the whole debugadapter
 import * as url from 'url';
 import { default as colorizer } from './colorizer';
 import { ChildProcess } from 'child_process';
-
+import { DestinationStream, BaseLogger, LogFn } from 'pino';
+import { Disposable0, Emitter, Event0 } from './IDEInterface';
 // import { DebugConfiguration } from 'vscode';
 export interface DebugConfiguration {
     /**
@@ -42,71 +43,17 @@ export interface DebugConfiguration {
 
 const chalk: chalk_d.ChalkInstance = chalk_d.default.constructor({ enabled: true, level: 2 });
 
-interface DebugProtocolMessage { }
-
-interface IDisposable {
-    dispose(): void;
-}
-
-class Disposable0 implements IDisposable {
-    dispose(): any { }
-}
-
-interface Event0<T> {
-    (listener: (e: T) => any, thisArg?: any): Disposable0;
-}
-
-class Emitter<T> {
-    private _event?: Event0<T>;
-    private _listener?: (e: T) => void;
-    private _this?: any;
-
-    get event(): Event0<T> {
-        if (!this._event) {
-            this._event = (listener: (e: T) => any, thisArg?: any) => {
-                this._listener = listener;
-                this._this = thisArg;
-
-                const result: IDisposable = {
-                    dispose: () => {
-                        this._listener = undefined;
-                        this._this = undefined;
-                    },
-                };
-                return result;
-            };
-        }
-        return this._event;
-    }
-
-    fire(event: T): void {
-        if (this._listener) {
-            try {
-                this._listener.call(this._this, event);
-            } catch (e) {
-                /* empty */
-            }
-        }
-    }
-
-    hasListener(): boolean {
-        return !!this._listener;
-    }
-
-    dispose() {
-        this._listener = undefined;
-        this._this = undefined;
-    }
-}
-
+export interface DebugProtocolMessage { }
 /**
  * A structurally equivalent copy of vscode.DebugAdapter
  */
-interface VSCodeDebugAdapter extends Disposable0 {
+export interface VSCodeDebugAdapter extends Disposable0 {
     readonly onDidSendMessage: Event0<DebugProtocolMessage>;
 
     handleMessage(message: DAP.ProtocolMessage): void;
 }
+
+
 
 const TWO_CRLF = '\r\n\r\n';
 const HEADER_LINESEPARATOR = /\r?\n/; // allow for non-RFC 2822 conforming line separators
@@ -243,7 +190,6 @@ const DEFAULT_CLIENT_CAPABILITIES: ClientCapabilities = {
     pathsAreURIs: false,
 };
 
-import { DestinationStream, BaseLogger, LogFn } from 'pino';
 // interface LogFn {
 //     // TODO: why is this different from `obj: object` or `obj: any`?
 //     /* tslint:disable:no-unnecessary-generics */
@@ -704,6 +650,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
             nargs.pathFormat = DEFAULT_CLIENT_CAPABILITIES.pathFormat;
         } else {
             nargs.pathsAreURIs = args.pathFormat === 'uri';
+            nargs.pathFormat = args.pathFormat;
         }
         if (typeof args.supportsVariableType !== 'boolean') {
             nargs.columnsStartAt1 = DEFAULT_CLIENT_CAPABILITIES.supportsVariableType;

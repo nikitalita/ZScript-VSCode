@@ -130,19 +130,86 @@ export interface Uri {
 
 }
 
-export interface FileAccessor {
+
+export interface FileAccessorBase {
     isWindows: boolean;
-    getWorkspaceRoot(): string;
-    getWorkspaceFolders(): WorkspaceFolder[];
     isDirectory(path: string): Promise<boolean>;
     isFile(path: string): Promise<boolean>;
-    findFiles(include: string, exclude: string, maxResults: number): Promise<string[]>;
+    findFiles(include: string, exclude: string, maxResults: number, roots?: string[]): Promise<string[]>;
     readDirectory(path: string): Promise<[string, FileType][]>;
     readFile(path: string): Promise<Uint8Array>;
     writeFile(path: string, contents: Uint8Array): Promise<void>;
 }
 
-export interface EventEmitterFactory<T> {
-    (): EventEmitter<T>;
+export abstract class FileAccessor implements FileAccessorBase {
+    abstract isWindows: boolean;
+    abstract isDirectory(path: string): Promise<boolean>;
+    abstract isFile(path: string): Promise<boolean>;
+    abstract findFiles(include: string, exclude: string, maxResults: number, roots?: string[]): Promise<string[]>;
+    abstract readDirectory(path: string): Promise<[string, FileType][]>;
+    abstract readFile(path: string): Promise<Uint8Array>;
+    abstract writeFile(path: string, contents: Uint8Array): Promise<void>;
+    constructor() { }
 }
 
+interface IDisposable {
+    dispose(): void;
+}
+
+export class Disposable0 implements IDisposable {
+    dispose(): any { }
+}
+
+export interface Event0<T> {
+    (listener: (e: T) => any, thisArg?: any): Disposable0;
+}
+
+
+export class Emitter<T> implements EventEmitter<T> {
+    private _events: Event0<T>[] = [];
+    private _listeners: ((e: T) => void)[] = [];
+    private _thises: any[] = [];
+
+    get event(): Event0<T> {
+        const new_event = (listener: (e: T) => any, thisArg?: any) => {
+            this._listeners.push(listener);
+            if (thisArg !== undefined) {
+                this._thises.push(thisArg);
+            }
+
+            const result: IDisposable = {
+                dispose: () => {
+                    // this._listener = undefined;
+                    this._listeners = this._listeners.filter(l => l !== listener);
+                    if (thisArg !== undefined) {
+                        this._thises = this._thises.filter(t => t !== thisArg);
+                    }
+                },
+            };
+            return result;
+        };
+        this._events.push(new_event);
+
+        return new_event;
+    }
+
+    fire(event: T): void {
+        for (let i = 0; i < this._listeners.length; i++) {
+            try {
+                this._listeners[i].call(this._thises[i], event);
+            } catch (e) {
+                /* empty */
+            }
+        }
+    }
+
+    hasListener(): boolean {
+        return this._listeners.length > 0;
+    }
+
+    dispose() {
+        this._events = [];
+        this._listeners = [];
+        this._thises = [];
+    }
+}

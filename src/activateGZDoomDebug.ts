@@ -13,7 +13,7 @@ import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoo
 import { DebugLauncherService, DebugLaunchState } from './DebugLauncherService';
 import { DEFAULT_PORT } from './GZDoomGame';
 import path from 'path';
-import { WorkspaceFileAccessor } from './IDEImplementation';
+import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 
 const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
@@ -60,7 +60,7 @@ export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 	}
 	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('gzdoom', factory));
 	if ('dispose' in factory && typeof factory.dispose === 'function') {
-		// @ts-ignore			
+        // @ts-ignore
 		context.subscriptions.push(factory);
 	}
 
@@ -81,13 +81,9 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 				config.name = 'Attach';
 				config.request = 'attach';
 				config.port = DEFAULT_PORT;
-				config.projectPath = '${workspaceFolder}';
-				config.projectArchive = 'project.pk3';
+                config.projectPath = '${workspaceFolder}';
 			}
-		}
-		if (!config.projectArchive) {
-			throw new Error("'projectArchive' is required");
-		}
+        }
 		return config;
 	}
 }
@@ -113,20 +109,33 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 	}
 
 	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
-		const options = _session.configuration as GZDoomDebugAdapterProxyOptions;
-		if (!options.projectPath) {
-			options.projectPath = _session.workspaceFolder?.uri.fsPath;
-		}
+        let options = _session.configuration as GZDoomDebugAdapterProxyOptions;
+        if (!_session.configuration.projectPath) {
+            if (!_session.workspaceFolder) {
+                throw new Error('No project path provided.');
+            }
+            options.projectPath = _session.workspaceFolder.uri.fsPath;
+        }
+        if (!options.projectPath) {
+            throw new Error('No project path provided.');
+        }
 		options.startNow = true;
 		options.consoleLogLevel = 'info';
+        if (!options.projectArchive) {
+            options.projectArchive = options.projectPath
+        }
+        if (!options.cwd) {
+            options.cwd = options.projectPath;
+        }
+        let isProjectArchiveDirectory = options.projectArchive == options.projectPath || await workspaceFileAccessor.isDirectory(options.projectArchive)
 		let launched: DebugLaunchState = DebugLaunchState.success;
 		if (options.request === 'launch') {
 			// check relative path
-			if (!path.isAbsolute(options.projectArchive)) {
+            if (!path.isAbsolute(options.projectArchive) && options.projectArchive != options.cwd) {
 				options.projectArchive = path.join(options.cwd, options.projectArchive);
 			}
 			// check if options.projectArchive exists
-			if (!await workspaceFileAccessor.readFile(options.projectArchive)) {
+            if (!await workspaceFileAccessor.isDirectory(options.projectArchive) && !await workspaceFileAccessor.isFile(options.projectArchive)) {
 				vscode.window.showErrorMessage(`Project archive path '${options.projectArchive}' does not exist.`);
 				_session.configuration.noop = true;
 				return noopExecutable;
@@ -171,8 +180,18 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 		var config = options as GZDoomDebugAdapterProxyOptions;
 		config.launcherProcess = debugLauncherService.launcherProcess;
 
+        if (isProjectArchiveDirectory) {
+            config.projectArchive = options.projectArchive;
+            // GZDoom appends a trailing slash to directories
+            if (!config.projectArchive.endsWith('/')) {
+                config.projectArchive += '/';
+            }
+        } else {
+            config.projectArchive = path.basename(options.projectArchive);
+        }
+
 		return new vscode.DebugAdapterInlineImplementation(
-			new GZDoomDebugAdapterProxy(_session.configuration as GZDoomDebugAdapterProxyOptions)
+            new GZDoomDebugAdapterProxy(workspaceFileAccessor, config)
 		);
 	}
 }

@@ -5,7 +5,7 @@ import * as path from 'path';
 import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
 import * as chalk_d from 'chalk';
-import { WorkspaceFileAccessor, EventEmitterFactory } from './IDEImplementation';
+import { FileAccessor, Emitter } from './IDEInterface';
 
 export enum ErrorDestination {
     User = 1,
@@ -13,7 +13,7 @@ export enum ErrorDestination {
 }
 
 export interface GZDoomDebugAdapterProxyOptions extends DebugAdapterProxyOptions {
-    projectPath?: string;
+    projectPath: string;
     projectArchive?: string;
 }
 
@@ -205,18 +205,17 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     private _pendingRequestsMap = new Map<number, pendingRequest>();
     private projectPath: string = '';
     private projectArchive: string | undefined = undefined;
-    private onFinishedScanning = EventEmitterFactory<number | null>();
+    private onFinishedScanning: Emitter<number | null> = new Emitter<number | null>();
     private done_scanning_project = false;
     private launch_request_sent = false;
-    private onSentLaunchRequest = EventEmitterFactory<number | null>();
+    private onSentLaunchRequest: Emitter<number | null> = new Emitter<number | null>();
     // Set of strings
     private sourcePaths: ICaseSet = new ICaseSet([]);
     private logServerToProxyReal: DAPLogLevel = 'info';
-    private workspaceFileAccessor = new WorkspaceFileAccessor();
+    private workspaceFileAccessor: FileAccessor;
 
-    private projectOrigin = '';
     // object name to source map
-    constructor(options: GZDoomDebugAdapterProxyOptions) {
+    constructor(fileAccessor: FileAccessor, options: GZDoomDebugAdapterProxyOptions) {
         const logdir = path.join(
             process.env.USERPROFILE || process.env.HOME || '.',
             'Documents',
@@ -225,16 +224,21 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             'Logs',
             'DAProxy'
         );
+
         options.logdir = options.logdir || logdir;
         options.debuggerLocale = GZDOOM_DAP_LOCALE;
         super(options);
-        this.projectPath = options.projectPath || this.workspaceFileAccessor.getWorkspaceRoot();
+        if (!options.projectPath) {
+            throw new Error('projectPath is required');
+        }
+        this.workspaceFileAccessor = fileAccessor;
+        this.projectPath = options.projectPath;
         this.scanProjectDirectoryForFiles(options.projectPath!);
         // get the base name of the project archive
         if (!options.projectArchive) {
             throw new Error('projectArchive is required');
         }
-        this.projectArchive = path.basename(options.projectArchive);
+        this.projectArchive = options.projectArchive;
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';
@@ -391,7 +395,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         const decorates = await this.workspaceFileAccessor.findFiles('**/DECORATE', '**/node_modules/**', 100000);
         const acs = await this.workspaceFileAccessor.findFiles('**/ACS', '**/node_modules/**', 100000);
         const combined = thing.concat(decorates).concat(acs);
-        this.sourcePaths = new ICaseSet(combined);
+        this.sourcePaths = new ICaseSet(combined.map((x) => x.startsWith(projectDirectory) ? x : path.join(projectDirectory, x)));
         this.done_scanning_project = true;
         this.onFinishedScanning.fire(null);
     }
@@ -438,7 +442,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     protected handleClientRequest(request: DAP.Request): void {
         try {
-
+            // check if it contains "break"
+            if (request.command.includes("Break")) {
+                console.log(request);
+            }
             if (request.command === 'launch') {
                 this.handleLaunchRequest(<DAP.LaunchRequest>request);
             } else if (request.command === 'attach') {
