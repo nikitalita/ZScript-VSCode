@@ -6,6 +6,7 @@ import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './Debu
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
 import * as chalk_d from 'chalk';
 import { FileAccessor, Emitter } from './IDEInterface';
+import { ProjectItem } from './GZDoomGame';
 
 export enum ErrorDestination {
     User = 1,
@@ -13,8 +14,8 @@ export enum ErrorDestination {
 }
 
 export interface GZDoomDebugAdapterProxyOptions extends DebugAdapterProxyOptions {
-    projectPath: string;
-    projectArchive?: string;
+    // array of projectItems or a single string
+    projects: Array<ProjectItem>;
 }
 
 type responseCallback = (response: DAP.Response, request: DAP.Request) => void;
@@ -199,20 +200,107 @@ class ICaseSet extends CustomSet<string> {
     }
 }
 
+class CustomMap<K, V> implements Map<K, V> {
+    private items: { key: K; value: V }[] = [];
+    private comparator: (a: K, b: K) => boolean;
+
+    constructor(comparator: (a: K, b: K) => boolean, entries?: Iterable<[K, V]>) {
+        this.comparator = comparator;
+        if (entries) {
+            for (const [key, value] of entries) {
+                this.set(key, value);
+            }
+        }
+    }
+
+    clear(): void {
+        this.items = [];
+    }
+
+    delete(key: K): boolean {
+        const index = this.items.findIndex(item => this.comparator(item.key, key));
+        if (index > -1) {
+            this.items.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
+
+    forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void {
+        this.items.forEach(item => callbackfn.call(thisArg, item.value, item.key, this));
+    }
+
+    get(key: K): V | undefined {
+        const item = this.items.find(item => this.comparator(item.key, key));
+        return item?.value;
+    }
+
+    has(key: K): boolean {
+        return this.items.some(item => this.comparator(item.key, key));
+    }
+
+    set(key: K, value: V): this {
+        const index = this.items.findIndex(item => this.comparator(item.key, key));
+        if (index > -1) {
+            this.items[index].value = value;
+        } else {
+            this.items.push({ key, value });
+        }
+        return this;
+    }
+
+    get size(): number {
+        return this.items.length;
+    }
+
+    entries(): IterableIterator<[K, V]> {
+        return this.items.map(item => [item.key, item.value] as [K, V])[Symbol.iterator]();
+    }
+
+    keys(): IterableIterator<K> {
+        return this.items.map(item => item.key)[Symbol.iterator]();
+    }
+
+    values(): IterableIterator<V> {
+        return this.items.map(item => item.value)[Symbol.iterator]();
+    }
+
+    [Symbol.iterator](): IterableIterator<[K, V]> {
+        return this.entries();
+    }
+
+    get [Symbol.toStringTag](): string {
+        return 'CustomMap';
+    }
+}
+
+class ICaseMap<V> extends CustomMap<string, V> {
+    constructor(iterable?: Iterable<[string, V]>) {
+        const comparator = (a, b) => {
+            return a.toLowerCase() === b.toLowerCase();
+        }
+        super(comparator, iterable);
+    }
+}
+
+interface SourceItem {
+    path: string;
+    origin: ProjectItem;
+}
 
 export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     private _pendingRequestsMap = new Map<number, pendingRequest>();
-    private projectPath: string = '';
-    private projectArchive: string | undefined = undefined;
+    private projectPaths: ProjectItem[] = [];
     private onFinishedScanning: Emitter<number | null> = new Emitter<number | null>();
     private done_scanning_project = false;
     private launch_request_sent = false;
     private onSentLaunchRequest: Emitter<number | null> = new Emitter<number | null>();
     // Set of strings
-    private sourcePaths: ICaseSet = new ICaseSet([]);
+    private sourcePaths: ICaseMap<SourceItem> = new ICaseMap<SourceItem>();
     private logServerToProxyReal: DAPLogLevel = 'info';
     private workspaceFileAccessor: FileAccessor;
+    private projects: ProjectItem[];
 
     // object name to source map
     constructor(fileAccessor: FileAccessor, options: GZDoomDebugAdapterProxyOptions) {
@@ -228,24 +316,19 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         options.logdir = options.logdir || logdir;
         options.debuggerLocale = GZDOOM_DAP_LOCALE;
         super(options);
-        if (!options.projectPath) {
+        if (!options.projects) {
             throw new Error('projectPath is required');
         }
         this.workspaceFileAccessor = fileAccessor;
-        this.projectPath = options.projectPath;
-        this.scanProjectDirectoryForFiles(options.projectPath!);
+        this.projects = options.projects;
+        this.scanProjectDirectoryForFiles(this.projects);
         // get the base name of the project archive
-        if (!options.projectArchive) {
-            throw new Error('projectArchive is required');
-        }
-        this.projectArchive = options.projectArchive;
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';
         this.logServerToProxy = 'silent'; // we take care of this ourselves
         this.logServerToProxyReal = 'info';
         this.logProxyToClient = 'trace';
-        this.projectArchive;
     }
     clearExecutionState() {
     }
@@ -384,18 +467,28 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         });
     }
 
-    protected async scanProjectDirectoryForFiles(projectDirectory: string) {
+    protected async scanProjectDirectoryForFiles(projectDirectories: ProjectItem[]) {
         // these types of files:
         // (ext == ".zs" || ext == ".zsc" || ext == ".zc" || ext == ".acs" || ext == ".dec")
         // also files named exactly this:
         // (entry.path().filename() == "DECORATE" || entry.path().filename() == "ACS")
+        // roots:
+        const projects = projectDirectories;
+        projects.sort((a, b) => b.path.length - a.path.length);
+        const roots = projectDirectories.map((x) => x.path);
         const file_glob = '**/*.{zs,zsc,zc,acs,dec}';
         // load the project directory
-        const thing = await this.workspaceFileAccessor.findFiles(file_glob, '**/node_modules/**', 100000);
-        const decorates = await this.workspaceFileAccessor.findFiles('**/DECORATE', '**/node_modules/**', 100000);
-        const acs = await this.workspaceFileAccessor.findFiles('**/ACS', '**/node_modules/**', 100000);
+        const thing = await this.workspaceFileAccessor.findFiles(file_glob, '**/node_modules/**', 100000, true, roots);
+        const decorates = await this.workspaceFileAccessor.findFiles('**/DECORATE', '**/node_modules/**', 100000, true, roots);
+        const acs = await this.workspaceFileAccessor.findFiles('**/ACS', '**/node_modules/**', 100000, true, roots);
         const combined = thing.concat(decorates).concat(acs);
-        this.sourcePaths = new ICaseSet(combined.map((x) => x.startsWith(projectDirectory) ? x : path.join(projectDirectory, x)));
+        let items = combined.map((x) => {
+            // find the project directory this starts with
+            const projectItem = projects.find((y) => x.startsWith(y.path));
+            const item = { path: x, origin: projectItem } as SourceItem;
+            return [x, item] as [string, SourceItem];
+        });
+        this.sourcePaths = new ICaseMap<SourceItem>(items);
         this.done_scanning_project = true;
         this.onFinishedScanning.fire(null);
     }
@@ -422,15 +515,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             return;
         }
 
-
-
-        request.arguments.projectSources = Array.from(this.sourcePaths).map((sourcePath) => {
+        // map passes in a tuple
+        request.arguments.projectSources = Array.from(this.sourcePaths).map(([sourcePath, projectItem]) => {
             return this.convertClientSourceToDebugger({
                 name: path.basename(sourcePath),
                 // make sure path is relative to the workspace folder
-                path: sourcePath,
-                origin: this.projectArchive,
-            } as DAP.Source);
+                path: sourcePath.toString(), // Convert path to string
+                origin: projectItem.origin.archive,
+            });
         });
         // send it on
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
@@ -443,7 +535,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     protected handleClientRequest(request: DAP.Request): void {
         try {
             // check if it contains "break"
-            if (request.command.includes("Break")) {
+            if (request.command.toLowerCase().includes("sources")) {
                 console.log(request);
             }
             if (request.command === 'launch') {
@@ -486,11 +578,28 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             this.sendErrorResponse(new Response(request), 1104, '{_stack}', e, ErrorDestination.Telemetry);
         }
     }
+    findSourceItemByPathAndOrigin(path: string, origin: string): SourceItem | undefined {
+        for (let item of this.sourcePaths.values()) {
+            if (item.path.toLowerCase().endsWith(path.toLowerCase()) && item.origin.archive == origin) {
+                return item;
+            }
+        }
+        return undefined;
+    }
     protected handleLoadedSourcesRequest(request: DAP.LoadedSourcesRequest) {
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
             const response = r as DAP.LoadedSourcesResponse;
             for (let i in response.body.sources) {
-                response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source);
+                let project = this.getProjectByArchive(response.body.sources[i].origin || "");
+                let sourcePath = response.body.sources[i].path;
+                if (sourcePath && project && !this.findSourceItemByPathAndOrigin(sourcePath || "", project!.archive || "")) {
+                    response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
+                    // add the source path to the source paths
+                    sourcePath = response.body.sources[i].path || "";
+                    this.sourcePaths.set(sourcePath, { path: sourcePath, origin: project });
+                } else {
+                    response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
+                }
             }
         });
     }
@@ -560,7 +669,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     protected handleScopesRequest(scopesRequest: DAP.ScopesRequest): void {
         this.sendRequestToServerWithCB(scopesRequest, DEFAULT_TIMEOUT, (r, _req) => {
             const response = r as DAP.ScopesResponse;
-
+            if (!response?.body) {
+                this.sendMessageToClient(response);
+                return;
+            }
             for (const scope of response?.body?.scopes) {
                 if (scope.source) {
                     scope.source = this.convertDebuggerSourceToClient(scope.source);
@@ -691,39 +803,47 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, _req) => this._defaultResponseHandler(r));
     }
 
+    private getProjectBySrcPath(srcPath: string): ProjectItem | undefined {
+        return this.projects.find(p => srcPath.toLowerCase().startsWith(p.path.toLowerCase()));
+    }
+    private getProjectByArchive(origin: string): ProjectItem | undefined {
+        return this.projects.find(p => origin.toLowerCase() == p.archive?.toLowerCase());
+    }
+
     private convertClientSourceToDebugger(Source: DAP.Source): DAP.Source {
         // change the source path to add the workspace folder
         if (!Source.path) {
             return Source;
         }
         Source.path = this.convertClientPathToDebugger(Source.path);
-        let new_path = path.isAbsolute(Source.path) ? path.relative(this.projectPath, Source.path) : Source.path;
-        if (new_path.startsWith('..') || path.isAbsolute(new_path)) {
-            new_path = Source.path;
-        }
-        Source.path = new_path;
-        if (!Source.origin) {
-            Source.origin = this.projectArchive;
+        const projectItem = this.getProjectBySrcPath(Source.path);
+
+        // if it matches any of the project paths, make it relative to that project path
+        if (projectItem) {
+            Source.path = path.isAbsolute(Source.path) ? path.relative(projectItem.path, Source.path) : Source.path;
+            Source.origin = projectItem.archive;
         }
         return Source;
     }
 
-    private convertDebuggerSourceToClient(Source: DAP.Source): DAP.Source {
+
+    private convertDebuggerSourceToClient(Source: DAP.Source, projectItem?: ProjectItem): DAP.Source {
         if (!Source || !Source.path) {
-            return Source
+            return Source;
         }
-        let new_path = Source.path;
-        if (Source.path && !path.isAbsolute(Source.path) && Source.origin?.toLowerCase() == this.projectArchive?.toLowerCase()) {
-            new_path = path.join(this.projectPath, Source.path);
+        let new_path: string = Source.path;
+        projectItem = projectItem || this.getProjectByArchive(Source.origin || "") || undefined;
+        if (Source.path && !path.isAbsolute(Source.path) && projectItem) {
+            new_path = path.join(projectItem.path, Source.path);
         }
-        // check if it's in the set of source paths
-        var ourPath = this.sourcePaths.get(new_path);
-        if (!ourPath) {
+        const sourceItem = this.sourcePaths.get(new_path);
+        if (!sourceItem) {
             Source.path = this.convertDebuggerPathToClient(Source.path);
             return Source;
         }
-        Source.path = this.convertDebuggerPathToClient(ourPath);
-        Source.name = path.basename(ourPath);
+        Source.path = this.convertDebuggerPathToClient(sourceItem.path);
+        Source.name = path.basename(sourceItem.path);
+        Source.origin = sourceItem.origin.archive;
         Source.sourceReference = 0;
         return Source;
     }

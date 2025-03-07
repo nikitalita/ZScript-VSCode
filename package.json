@@ -841,14 +841,10 @@
                                 "description": "Port to attach to",
                                 "default": 19021
                             },
-                            "projectPath": {
-                                "type": "string",
-                                "description": "Root folder of the project",
-                                "default": "${workspaceFolder}"
-                            },
-                            "projectArchive": {
-                                "type": "string",
-                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.). Only required if debugging scripts from a package."
+                            "projects": {
+                                "type": "array",
+                                "description": "Either the root folder(s) of the project(s) or a mapping of paths to their corresponding archive names (e.g. [{path: '${workspaceFolder}', archive: 'project.pk3'}, ...])",
+                                "default": ["${workspaceFolder}"]
                             }
                         }
                     },
@@ -863,14 +859,10 @@
                                 "description": "Port to attach to",
                                 "default": 19021
                             },
-                            "projectPath": {
-                                "type": "string",
-                                "description": "Root folder of the project",
-                                "default": "${workspaceFolder}"
-                            },
-                            "projectArchive": {
-                                "type": "string",
-                                "description": "Name of the project archive that gets loaded into GZDoom (e.g. project.wad, project.pk3, etc.). Only required if debugging scripts from a package."
+                            "projects": {
+                                "type": "array",
+                                "description": "Either the root folder(s) of the project(s) or a mapping of paths to their corresponding archive names (e.g. [{path: '${workspaceFolder}', archive: 'project.pk3'}, ...])",
+                                "default": ["${workspaceFolder}"]
                             },
                             "iwad":{
                                 "type": "string",

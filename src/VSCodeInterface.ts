@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
 import { FileAccessor } from './IDEInterface';
+import path from 'path';
+import { glob as _glob } from 'glob';
+import { promisify } from 'util';
+
+const glob = promisify(_glob);
+
 
 function pathToUri(path: string) {
     try {
@@ -44,11 +50,52 @@ export class VSCodeFileAccessor implements FileAccessor {
         await vscode.workspace.fs.writeFile(pathToUri(path), contents);
     }
 
-    async findFiles(include: string, exclude?: string, maxResults?: number, roots?: string[]): Promise<string[]> {
-        let thing = await vscode.workspace.findFiles(include, exclude, maxResults, undefined);
-        if (roots) {
-            thing = thing.filter(uri => roots.some(root => uri.fsPath.startsWith(root)));
+    async findFiles(include: string, exclude: string, maxResults: number, absolute: boolean = true, roots?: string[]): Promise<string[]> {
+        let thing = (await vscode.workspace.findFiles(include, exclude, maxResults, undefined)).map(uri => uri.fsPath);
+        let workspaceFolders: string[] = [];
+        let _roots = roots && roots !== undefined ? roots : [];
+
+        if (vscode.workspace.workspaceFolders) {
+            for (let i = 0; i < vscode.workspace.workspaceFolders?.length; i++) {
+                workspaceFolders.push(vscode.workspace.workspaceFolders[i].uri.fsPath);
+            }
         }
-        return thing.map(uri => uri.fsPath);
+        if (_roots && _roots.length > 0) {
+            // make the roots absolute
+            _roots = _roots.map(root => path.resolve(root));
+            thing = thing.filter(path => _roots.some(root => path.startsWith(root)));
+            // check if any of the roots are not in the workspaceFolders
+            if (workspaceFolders.length > 0) {
+                let notInWorkspaceFolders = _roots.filter(root => !workspaceFolders.includes(root));
+                if (notInWorkspaceFolders.length > 0) {
+                    // get the files in the notInWorkspaceFolders
+                    for (let i = 0; i < notInWorkspaceFolders.length; i++) {
+                        let root = notInWorkspaceFolders[i];
+                        let files = await glob(include, {
+                            ignore: exclude,
+                            absolute: absolute,
+                            cwd: root
+                        });
+                        thing = thing.concat(files);
+                    }
+                }
+            }
+        } else {
+            _roots = workspaceFolders;
+        }
+        // sort the _roots array by length, such that the longest root is first
+        _roots.sort((a, b) => b.length - a.length);
+
+        if (!absolute && _roots.length > 0) {
+            // find the root that is the longest match
+            return thing.map(path => {
+                let root = _roots.find(root => path.startsWith(root));
+                if (root) {
+                    return path.substring(root.length);
+                }
+                return path;
+            });
+        }
+        return thing;
     }
 }

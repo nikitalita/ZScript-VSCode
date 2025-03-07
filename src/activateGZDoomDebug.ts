@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
 import { DebugLauncherService, DebugLaunchState } from './DebugLauncherService';
-import { DEFAULT_PORT } from './GZDoomGame';
+import { DEFAULT_PORT, ProjectItem } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 
@@ -33,8 +33,7 @@ export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 					name: 'gzdoom Attach',
 					request: 'attach',
 					port: DEFAULT_PORT,
-					projectPath: '${workspaceFolder}',
-					projectArchive: 'project.pk3'
+                    projects: ['${workspaceFolder}'],
 				},
 				{
 					type: 'gzdoom',
@@ -43,8 +42,7 @@ export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 					gzdoomPath: "C:/Program Files/GZDoom/gzdoom.exe",
 					cwd: '${workspaceFolder}',
 					port: DEFAULT_PORT,
-					projectPath: '${workspaceFolder}',
-					projectArchive: 'project.pk3',
+                    projects: ['${workspaceFolder}'],
 					iwad: 'doom2.wad',
 					configPath: '',
 					map: '',
@@ -81,7 +79,7 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 				config.name = 'Attach';
 				config.request = 'attach';
 				config.port = DEFAULT_PORT;
-                config.projectPath = '${workspaceFolder}';
+                config.projects = ['${workspaceFolder}'];
 			}
         }
 		return config;
@@ -110,40 +108,55 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 
 	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
         let options = _session.configuration as GZDoomDebugAdapterProxyOptions;
-        if (!_session.configuration.projectPath) {
+        if (!_session.configuration.projects) {
             if (!_session.workspaceFolder) {
                 throw new Error('No project path provided.');
             }
-            options.projectPath = _session.workspaceFolder.uri.fsPath;
+            options.projects = [
+                {
+                    path: _session.workspaceFolder?.uri.fsPath,
+                    archive: _session.workspaceFolder?.uri.fsPath
+                }
+            ]
         }
-        if (!options.projectPath) {
+        if (!options.cwd) {
+            options.cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        }
+
+        let projects: ProjectItem[] = options.projects?.map(project => {
+            if (typeof project === 'string') {
+                project = { path: project, archive: project };
+            }
+            if (!project.archive) {
+                project.archive = project.path;
+            }
+            // if the archive is relative, make it absolute
+            if (!path.isAbsolute(project.archive) && project.archive != options.cwd) {
+                project.archive = path.join(options.cwd, project.archive);
+            }
+            // check if it exists
+            return project;
+        });
+        if (!projects || projects.length === 0) {
             throw new Error('No project path provided.');
         }
 		options.startNow = true;
-		options.consoleLogLevel = 'info';
-        if (!options.projectArchive) {
-            options.projectArchive = options.projectPath
-        }
-        if (!options.cwd) {
-            options.cwd = options.projectPath;
-        }
-        let isProjectArchiveDirectory = options.projectArchive == options.projectPath || await workspaceFileAccessor.isDirectory(options.projectArchive)
+        options.consoleLogLevel = 'info';
 		let launched: DebugLaunchState = DebugLaunchState.success;
 		if (options.request === 'launch') {
 			// check relative path
-            if (!path.isAbsolute(options.projectArchive) && options.projectArchive != options.cwd) {
-				options.projectArchive = path.join(options.cwd, options.projectArchive);
-			}
-			// check if options.projectArchive exists
-            if (!await workspaceFileAccessor.isDirectory(options.projectArchive) && !await workspaceFileAccessor.isFile(options.projectArchive)) {
-				vscode.window.showErrorMessage(`Project archive path '${options.projectArchive}' does not exist.`);
-				_session.configuration.noop = true;
-				return noopExecutable;
-			}
+            for (let project of projects) {
+                if (!await workspaceFileAccessor.isDirectory(project?.archive || '') && !await workspaceFileAccessor.isFile(project?.archive || '')) {
+                    vscode.window.showErrorMessage(`Project archive path '${project.archive}' does not exist.`);
+                    _session.configuration.noop = true;
+                    return noopExecutable;
+                }
+
+            }
 			const launchCommand = debugLauncherService.getLaunchCommand(
 				options.gzdoomPath,
 				options.iwad,
-				[options.projectArchive],
+                projects.map(p => typeof p === 'string' ? p : (p.archive || '')),
 				options.port,
 				options.map,
 				options.configPath,
@@ -176,20 +189,24 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 			_session.configuration.noop = true;
 			return noopExecutable;
 		}
-
+        options.projects = projects;
 		var config = options as GZDoomDebugAdapterProxyOptions;
 		config.launcherProcess = debugLauncherService.launcherProcess;
 
-        if (isProjectArchiveDirectory) {
-            config.projectArchive = options.projectArchive;
-            // GZDoom appends a trailing slash to directories
-            if (!config.projectArchive.endsWith('/')) {
-                config.projectArchive += '/';
+        for (let project of config.projects) {
+            if (typeof project === 'string' || !project.archive) {
+                throw new Error('Project archive path is required.');
             }
-        } else {
-            config.projectArchive = path.basename(options.projectArchive);
+            let isProjectArchiveDirectory = project.archive == project.path || await workspaceFileAccessor.isDirectory(project.archive);
+            if (isProjectArchiveDirectory) {
+                project.archive = project.archive;
+                if (!project.archive.endsWith('/')) {
+                    project.archive += '/';
+                }
+            } else {
+                project.archive = path.basename(project.archive);
+            }
         }
-
 		return new vscode.DebugAdapterInlineImplementation(
             new GZDoomDebugAdapterProxy(workspaceFileAccessor, config)
 		);

@@ -135,7 +135,7 @@ export interface FileAccessorBase {
     isWindows: boolean;
     isDirectory(path: string): Promise<boolean>;
     isFile(path: string): Promise<boolean>;
-    findFiles(include: string, exclude: string, maxResults: number, roots?: string[]): Promise<string[]>;
+    findFiles(include: string, exclude: string, maxResults: number, absolute?: boolean, roots?: string[]): Promise<string[]>;
     readDirectory(path: string): Promise<[string, FileType][]>;
     readFile(path: string): Promise<Uint8Array>;
     writeFile(path: string, contents: Uint8Array): Promise<void>;
@@ -145,7 +145,7 @@ export abstract class FileAccessor implements FileAccessorBase {
     abstract isWindows: boolean;
     abstract isDirectory(path: string): Promise<boolean>;
     abstract isFile(path: string): Promise<boolean>;
-    abstract findFiles(include: string, exclude: string, maxResults: number, roots?: string[]): Promise<string[]>;
+    abstract findFiles(include: string, exclude: string, maxResults: number, absolute?: boolean, roots?: string[]): Promise<string[]>;
     abstract readDirectory(path: string): Promise<[string, FileType][]>;
     abstract readFile(path: string): Promise<Uint8Array>;
     abstract writeFile(path: string, contents: Uint8Array): Promise<void>;
