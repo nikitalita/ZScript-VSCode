@@ -340,12 +340,18 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             const pending = this._pendingRequestsMap.get(response.request_seq);
             // The callbacks should handle all the responses we need to translate into the expected response objects
             if (pending) {
-                if (!pending.noLogResponse) {
-                    this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
-                }
                 this._pendingRequestsMap.delete(response.request_seq);
+                // check if this is a scopes request
+                if (response.success === false && pending.request.command === 'scopes') {
+                    // just ignore it, it likely happened because of a request for scopes that went out before a debug step happened
+                    // we don't send a response since the client will invalidate the current variables view if we do and it will forget about it anyway
+                    this.log('warn', this.getLogObj(message), '!!!!IGNORED FAILED SCOPES RESPONSE');
+                    return;
+                }
                 if (response.success === false && this.logRequestOnErrorResponse) {
-                    this.log(this.logServerToProxyReal, this.getLogObj(message), '!!!!FAILED_REQUEST:');
+                    this.log('warn', this.getLogObj(pending.request), '!!!!FAILED_REQUEST:');
+                } else if (!pending.noLogResponse) {
+                    this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
                 }
                 pending.cb(response, pending.request);
                 return;
