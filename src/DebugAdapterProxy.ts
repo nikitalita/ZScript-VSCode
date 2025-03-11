@@ -320,11 +320,11 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         // this.launcherProcess?.stdout?.on('data', (data) => {
         //     this.loginfo(data.toString());
         // });
-        this.launcherProcess?.addListener('exit', (code) => {
-            this.loginfo(`Launcher process exited with code ${code}`);
-            this.emitExit(code);
-            this.stop();
-        });
+        // this.launcherProcess?.addListener('exit', (code) => {
+        //     this.loginfo(`Launcher process exited with code ${code}`);
+        //     this.emitExit(code);
+        //     this.stop();
+        // });
         this.port = options.port;
         this.host = options.host || 'localhost';
         this.consoleLogLevel = options.consoleLogLevel || this.consoleLogLevel;

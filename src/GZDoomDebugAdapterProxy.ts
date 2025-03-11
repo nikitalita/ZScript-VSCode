@@ -394,10 +394,12 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         // The output messages don't have newlines, so just append one.
         // TODO: something with the rest of the fields?
         // if it doesn't end with a newline, add one
-        if (message.body.output && !message.body.output.endsWith('\n')) {
-            message.body.output += '\n';
+        if (message.body.output) {
+            if (!message.body.output.endsWith('\n')) {
+                message.body.output += '\n';
+            }
+            message.body.output = colorize_log_output(message.body.output);
         }
-        message.body.output = colorize_log_output(message.body.output);
         this.sendMessageToClient(message);
     }
 

@@ -106,6 +106,36 @@ export class DebugLauncherService implements IDebugLauncherService {
         }
     }
 
+    processExitedWithError() {
+        return !this.launcherProcess || (this.launcherProcess.exitCode !== null && this.launcherProcess.exitCode !== 0)
+    }
+
+    async waitForPort(cancellationToken: CancellationToken, port: number, connectionTimeout: number = 15000, startTime: number = new Date().getTime()) {
+        let result = false;
+        while (!cancellationToken.isCancellationRequested) {
+            const currentTime = new Date().getTime();
+            const timedOut = currentTime > startTime + connectionTimeout;
+            if (timedOut) {
+                return false;
+            } else {
+                // DAP server is interpreting the port probing as a connection, disabling for now
+                result = (
+                    await waitPort({
+                        host: 'localhost',
+                        port: port,
+                        timeout: 1000,
+                        interval: 1000,
+                        output: 'silent',
+                    })
+                ).open;
+                if (result) {
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     public getLaunchCommand(
         gzdoomPath: string,
         iwad: string,
@@ -140,6 +170,7 @@ export class DebugLauncherService implements IDebugLauncherService {
             cwd: cwd,
         };
     }
+
 
     async runLauncher(
         launcherCommand: LaunchCommand,
