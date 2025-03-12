@@ -90,22 +90,24 @@ const sleep = (time: number) => {
 }
 
 
-function cancellableWindow(title: string, timeout: number, timeoutMessage?: string, cancellationToken?: CancellationToken) {
+function cancellableWindow(title: string, timeout: number, timeoutMessage?: string, ourCancellationToken?: CancellationToken) {
     return vscode.window.withProgress({
         title: title,
         location: vscode.ProgressLocation.Notification,
-        cancellable: !!cancellationToken
+        cancellable: !!ourCancellationToken
     },
         async (progress, token) => {
             return new Promise((async (resolve) => {
                 // You code to process the progress
-                cancellationToken?.onCancellationRequested(() => {
+                let cancel_func = () => {
                     if (timeoutMessage) {
                         vscode.window.showInformationMessage(timeoutMessage);
                     }
                     resolve(false);
                     return;
-                });
+                }
+                token.onCancellationRequested(cancel_func);
+                ourCancellationToken?.onCancellationRequested(cancel_func);
                 const seconds = timeout;
                 for (let i = 0; i < seconds; i++) {
                     await sleep(100);
@@ -139,7 +141,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
                 65000,
                 undefined,
                 cancellationToken
-            ).then(() => {
+            ).then((result) => {
                 resolved = true;
             });
             let result = false;
@@ -223,7 +225,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 				`Waiting for gzdoom to start...`,
 				30000
 			);
-			await debugLauncherService.runLauncher(launchCommand, port, cancellationToken);
+            launched = await debugLauncherService.runLauncher(launchCommand, port, cancellationToken);
 			wait_message.dispose();
 		}
 		if (launched != DebugLaunchState.success) {

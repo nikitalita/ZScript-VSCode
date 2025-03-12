@@ -203,7 +203,10 @@ class ConsoleStream implements DestinationStream {
         console.log(msg);
     }
     public log(level: string, obj: any, msg?: string, ...args: any[]) {
-        if (typeof obj === 'string' && !msg) {
+        if (typeof obj === 'string') {
+            if (msg !== undefined) {
+                args.unshift(msg);
+            }
             msg = obj;
             obj = undefined;
         }
