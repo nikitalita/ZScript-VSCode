@@ -53,7 +53,7 @@ export interface VSCodeDebugAdapter extends Disposable0 {
     handleMessage(message: DAP.ProtocolMessage): void;
 }
 
-
+const isProduction = false;
 
 const TWO_CRLF = '\r\n\r\n';
 const HEADER_LINESEPARATOR = /\r?\n/; // allow for non-RFC 2822 conforming line separators
@@ -104,7 +104,7 @@ export interface DebugAdapterProxyOptions extends DebugConfiguration {
     consoleLogLevel?: DAPLogLevel;
     /**
      * Log level for messages output to the log file (default: "trace")
-     * `quiet` turns off file logging
+     * `silent` turns off file logging
      */
     fileLogLevel?: DAPLogLevel;
     /**
@@ -203,15 +203,22 @@ class ConsoleStream implements DestinationStream {
         console.log(msg);
     }
     public log(level: string, obj: any, msg?: string, ...args: any[]) {
+        if (typeof obj === 'string' && !msg) {
+            msg = obj;
+            obj = undefined;
+        }
         if (level === 'fatal' || level === 'error' || level === 'warn') {
             console.error(colorizeMessage(true, msg), ...args);
-            console.error(obj);
+            if (obj) {
+                console.error(obj);
+            }
             return;
         }
         console.log(colorizeMessage(false, msg), ...args);
-        console.log(obj);
+        if (obj) {
+            console.log(obj);
+        }
     }
-
 }
 
 function colorizeMessage(is_error: boolean, message?: string) {
@@ -219,6 +226,30 @@ function colorizeMessage(is_error: boolean, message?: string) {
         return chalk.hex('#FF0000')(message);
     }
     return chalk.hex('#CE9178')(message);
+}
+class NoOpStream implements DestinationStream {
+    public write(msg: string) { }
+    public log(level: string, obj: any, msg?: string, ...args: any[]) { }
+}
+class NoOpLogger implements BaseLogger {
+    private cstream: ConsoleStream = new NoOpStream();
+    constructor() {
+    }
+    public level = 'silent';
+    public fatal(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public error(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public warn(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public info(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public debug(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public trace(obj: any, msg?: string, ...args: any[]): void {
+    }
+    public silent(obj: any, msg?: string, ...args: any[]): void {
+    }
 }
 
 class ConsoleLogger implements BaseLogger {
@@ -229,7 +260,7 @@ class ConsoleLogger implements BaseLogger {
     }
     constructor() {
     }
-    public level = 'info';
+    public level = 'silent';
 
     // levels go like this: silent, trace, debug, info, warn, error, fatal
     levelToInt(level: string) {
@@ -247,14 +278,15 @@ class ConsoleLogger implements BaseLogger {
             case 'trace':
                 return 10;
             case 'silent':
-                return 0;
+                return 1000;
             default:
-                return 0;
+                return 1000;
         }
-
-
     }
     public shouldLog(level: string) {
+        if (this.level === 'silent') {
+            return false;
+        }
         // levels go like this: silent, trace, debug, info, warn, error, fatal
         return this.levelToInt(level) >= this.levelToInt(this.level);
     }
@@ -281,8 +313,14 @@ class ConsoleLogger implements BaseLogger {
     }
 }
 
+enum DebugAdapterProxyState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Stopping
+}
 export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
-    protected connected = false;
+    protected currentState = DebugAdapterProxyState.Disconnected;
     protected outputStream!: stream.Writable;
     protected inputStream!: stream.Readable;
     protected rawData = Buffer.allocUnsafe(0);
@@ -298,8 +336,8 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected logServerToProxy: DAPLogLevel = 'debug';
     protected logProxyToServer: DAPLogLevel = 'trace';
     protected logRequestOnErrorResponse: boolean = true;
-    protected consoleLogLevel: DAPLogLevel = 'info';
-    protected fileLogLevel: DAPLogLevel = 'trace';
+    protected consoleLogLevel: DAPLogLevel = isProduction ? 'warn' : 'debug';
+    protected fileLogLevel: DAPLogLevel = 'silent';
     protected readonly connectionTimeoutLimit = 12000; // the debugger will disconnect after about 20 seconds, so we need to be faster than that
     protected connectionTimeout: NodeJS.Timeout | undefined;
     protected logDirectory: string;
@@ -312,6 +350,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected clientCaps: ClientCapabilities;
     protected debuggerLocale: DebuggerLocale;
     protected launcherProcess?: ChildProcess
+    protected _onConnected: Emitter<void> = new Emitter<void>();
     constructor(options: DebugAdapterProxyOptions) {
         this.launcherProcess = options.launcherProcess;
         // this.launcherProcess?.stderr?.on('data', (data) => {
@@ -374,6 +413,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         // this.loggerConsole = pino({ level: this.consoleLogLevel }, pprinterConsole);
         // instance of ConsoleLogger
         this.loggerConsole = new ConsoleLogger();
+        this.loggerConsole.level = this.consoleLogLevel;
         if (options.startNow) this.start();
         this.loginfo('Started.');
     }
@@ -454,21 +494,30 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     }
 
     public start() {
+        this.currentState = DebugAdapterProxyState.Connecting;
         // set a timeout that kills the server if no connection is established within 12 seconds
         this.connectionTimeout = setTimeout(() => {
-            this.emitOutputEvent('Cannot connect to Starfield DAP server!', 'important');
+            this.logerror('Cannot connect to DAP server!');
+            this.emitOutputEvent('Cannot connect to DAP server!', 'important');
             this.stop();
         }, this.connectionTimeoutLimit);
         this._socket = net.createConnection(this.port, this.host, () => {
             this.connect(this._socket!, this._socket!);
-            this.connected = true;
+            this.loginfo('Connected to DAP server!');
             clearTimeout(this.connectionTimeout);
+            // create a new timer that fires the onConnected event after 100ms
+            setTimeout(() => {
+                this.currentState = DebugAdapterProxyState.Connected;
+                this._onConnected.fire();
+            }, 100);
         });
         this._socket.on('close', () => {
-            if (this.connected) {
+            if (this.currentState === DebugAdapterProxyState.Connected) {
+                this.loginfo('Connection closed.');
                 this.emitOutputEvent('Connection closed.', 'console');
                 this.emitExit(0);
-            } else {
+            } else if (this.currentState === DebugAdapterProxyState.Connecting) {
+                this.logerror('Connection closed without connecting!');
                 this.emitOutputEvent(`Connection closed without connecting!`, 'console');
                 this.emitError(Error('Connection closed without connecting!'));
                 this.emitExit(-1);
@@ -477,7 +526,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         });
 
         this._socket.on('error', (error: NodeJS.ErrnoException) => {
-            if (this.connected && error.code && error.code === 'ECONNRESET') {
+            if (this.currentState === DebugAdapterProxyState.Connected && error.code && error.code === 'ECONNRESET') {
                 this.emitOutputEvent('Connection reset.', 'console');
                 this.emitExit(0);
             } else {
@@ -490,13 +539,21 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     }
 
     public stop() {
-        this.connected = false;
+        if (this.currentState === DebugAdapterProxyState.Connected) {
+            this.loginfo('Stopping...');
+        } else if (this.currentState === DebugAdapterProxyState.Stopping || this.currentState === DebugAdapterProxyState.Disconnected) {
+            return;
+        }
+        this.currentState = DebugAdapterProxyState.Stopping;
         if (this.connectionTimeout) {
             clearTimeout(this.connectionTimeout);
         }
 
         this.sendMessageToClient(new Event('terminated'));
+        // remove the listener from the socket
+        this._socket?.removeAllListeners();
         this._socket?.destroy();
+        this.currentState = DebugAdapterProxyState.Disconnected;
     }
 
     protected emitOutputEvent(message: string, category: string = 'console') {
@@ -752,9 +809,19 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         if (!this.handleMessageFromClient) {
             throw new Error('handleMessageFromClient is undefined');
         }
+
         this.log(this.logClientToProxy, this.getLogObj(message as DAP.ProtocolMessage), '---CLIENT->PROXY:');
         if ((message as DAP.ProtocolMessage)?.type === 'request' && (message as DAP.Request)?.command === 'initialize') {
             this.setClientCapabilities((message as DAP.InitializeRequest).arguments);
+        }
+        if (this.currentState !== DebugAdapterProxyState.Connected) {
+            this._onConnected.event(() => {
+                if (!this.handleMessageFromClient) {
+                    throw new Error('handleMessageFromClient is undefined');
+                }
+                this.handleMessageFromClient(message as DAP.ProtocolMessage);
+            });
+            return;
         }
         this.handleMessageFromClient(message as DAP.ProtocolMessage);
     }

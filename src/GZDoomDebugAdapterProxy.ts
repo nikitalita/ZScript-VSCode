@@ -326,8 +326,8 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';
+        this.logServerToProxyReal = this.logServerToProxy;
         this.logServerToProxy = 'silent'; // we take care of this ourselves
-        this.logServerToProxyReal = 'info';
         this.logProxyToClient = 'trace';
     }
     clearExecutionState() {
@@ -510,12 +510,6 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.handleLaunchOrAttach(request);
     }
     private handleLaunchOrAttach(request: DAP.Request): void {
-        if (!this.connected) {
-            this._socket?.once('connect', () => {
-                this.handleLaunchOrAttach(request);
-            });
-            return;
-        }
         if (!this.done_scanning_project) {
             this.onFinishedScanning.event(() => {
                 this.handleLaunchOrAttach(request);
@@ -543,9 +537,6 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     protected handleClientRequest(request: DAP.Request): void {
         try {
             // check if it contains "break"
-            if (request.command.toLowerCase().includes("sources")) {
-                console.log(request);
-            }
             if (request.command === 'launch') {
                 this.handleLaunchRequest(<DAP.LaunchRequest>request);
             } else if (request.command === 'attach') {
@@ -614,7 +605,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
 
     protected handleDisconnectRequest(request: DAP.DisconnectRequest): void {
         this.sendRequestToServerWithCB(request, 5000, (_r, _req) => {
-            this.stop();
+            // wait 500ms for the terminate event to fire; otherwise just stop
+            setTimeout(() => {
+                this.stop();
+            }, 500);
         });
     }
 

@@ -1,9 +1,3 @@
-/*---------------------------------------------------------
- * Copyright (C) Microsoft Corporation. All rights reserved.
- *--------------------------------------------------------*/
-/*
- * activategzdoomDebug.ts containes the shared extension code that can be executed both in node.js and the browser.
- */
 
 'use strict';
 
@@ -14,6 +8,7 @@ import { DebugLauncherService, DebugLaunchState } from './DebugLauncherService';
 import { DEFAULT_PORT, ProjectItem } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
+import waitPort from 'wait-port';
 
 const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
@@ -86,25 +81,82 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 	}
 }
 
+const sleep = (time: number) => {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve(true);
+        }, time);
+    });
+}
+
+
+function cancellableWindow(title: string, timeout: number, timeoutMessage?: string, cancellationToken?: CancellationToken) {
+    return vscode.window.withProgress({
+        title: title,
+        location: vscode.ProgressLocation.Notification,
+        cancellable: !!cancellationToken
+    },
+        async (progress, token) => {
+            return new Promise((async (resolve) => {
+                // You code to process the progress
+                cancellationToken?.onCancellationRequested(() => {
+                    if (timeoutMessage) {
+                        vscode.window.showInformationMessage(timeoutMessage);
+                    }
+                    resolve(false);
+                    return;
+                });
+                const seconds = timeout;
+                for (let i = 0; i < seconds; i++) {
+                    await sleep(100);
+                }
+                resolve(true);
+            }));
+        });
+}
 
 const noopExecutable = new vscode.DebugAdapterExecutable('node', ['-e', '""']);
 
 class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
-	async ensureGameRunning() {
-		if (!(await debugLauncherService.getGameIsRunning())) {
-			const selectedGameRunningOption = await vscode.window.showWarningMessage(
-				`Make sure that gzdoom is running and is either in-game or at the main menu.`,
-				'Continue',
-				'Cancel'
-			);
+    async ensureGameRunning(port: number) {
+        if (!(await debugLauncherService.getGameIsRunning()) || !(await debugLauncherService.waitForPort(port, 1000))) {
 
-			if (selectedGameRunningOption !== 'Continue') {
-				return false;
-			}
-		}
 
-		return true;
-	}
+            let cancellationSource = new vscode.CancellationTokenSource();
+            let cancellationToken = cancellationSource.token;
+
+            // let warningMessage = vscode.window.showWarningMessage(
+            //     `Make sure that gzdoom is running and is either in-game or at the main menu.`,
+            //     'Continue',
+            //     'Cancel'
+            // ).then(pickedOption => {
+            //     selectedGameRunningOption = pickedOption || 'Cancel';
+            // });
+            let resolved = false;
+            let timedOut = false;
+            let windowPromise = cancellableWindow(
+                `Make sure that gzdoom is running and is either in-game or at the main menu.`,
+                65000,
+                undefined,
+                cancellationToken
+            ).then(() => {
+                resolved = true;
+            });
+            let result = false;
+            // now while the user is deciding, keep checking if the game is running
+            result = await debugLauncherService.waitForPort(port, 60000, () => {
+                return !resolved;
+            });
+            cancellationSource.cancel();
+            // i.e. the user didn't cancel the window
+            if (!resolved) {
+                return result;
+            }
+            return false;
+        }
+        // sleep(1000);
+        return true;
+    }
 
 	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
         let options = _session.configuration as GZDoomDebugAdapterProxyOptions;
@@ -119,6 +171,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
                 }
             ]
         }
+        options.port = options.port || DEFAULT_PORT;
         if (!options.cwd) {
             options.cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         }
@@ -141,7 +194,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             throw new Error('No project path provided.');
         }
 		options.startNow = true;
-        options.consoleLogLevel = 'info';
+        options.consoleLogLevel = 'debug';
 		let launched: DebugLaunchState = DebugLaunchState.success;
 		if (options.request === 'launch') {
 			// check relative path
@@ -185,7 +238,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 			// throw an error indicating the launch failed
 			throw new Error(`'gzdoom' failed to launch.`);
 			// attach
-		} else if (!(await this.ensureGameRunning())) {
+        } else if (!(await this.ensureGameRunning(options.port))) {
 			_session.configuration.noop = true;
 			return noopExecutable;
 		}

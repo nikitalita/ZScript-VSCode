@@ -110,25 +110,32 @@ export class DebugLauncherService implements IDebugLauncherService {
         return !this.launcherProcess || (this.launcherProcess.exitCode !== null && this.launcherProcess.exitCode !== 0)
     }
 
-    async waitForPort(cancellationToken: CancellationToken, port: number, connectionTimeout: number = 15000, startTime: number = new Date().getTime()) {
+    /**
+     *
+     * @param port
+     * @param connectionTimeout
+     * @param intervalCallback called every 1000ms if we've failed to open the port, but haven't timed out yet; returns true if we should keep waiting
+     * @returns true if the port was opened, false if we timed out
+     */
+    async waitForPort(port: number, connectionTimeout: number = 15000, intervalCallback: () => boolean = () => true) {
         let result = false;
-        while (!cancellationToken.isCancellationRequested) {
+        const startTime: number = new Date().getTime();
+        while (true) {
             const currentTime = new Date().getTime();
             const timedOut = currentTime > startTime + connectionTimeout;
             if (timedOut) {
                 return false;
             } else {
-                // DAP server is interpreting the port probing as a connection, disabling for now
                 result = (
                     await waitPort({
                         host: 'localhost',
                         port: port,
-                        timeout: 1000,
-                        interval: 1000,
+                        timeout: Math.min(1000, connectionTimeout),
+                        interval: Math.min(1000, connectionTimeout),
                         output: 'silent',
                     })
                 ).open;
-                if (result) {
+                if (result || !intervalCallback()) {
                     break;
                 }
             }
