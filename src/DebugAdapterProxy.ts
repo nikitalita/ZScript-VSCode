@@ -12,7 +12,7 @@ import * as pino_pretty from 'pino-pretty';
 import * as chalk_d from 'chalk';
 // import { default as colorizer } from '../../common/colorizer';
 import { default as split } from 'split2';
-import { Event } from '@vscode/debugadapter/lib/messages'; // avoid pulling in the whole debugadapter
+import { Event, Response } from '@vscode/debugadapter/lib/messages'; // avoid pulling in the whole debugadapter
 import * as url from 'url';
 import { default as colorizer } from './colorizer';
 import { ChildProcess } from 'child_process';
@@ -818,6 +818,14 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
             this.setClientCapabilities((message as DAP.InitializeRequest).arguments);
         }
         if (this.currentState !== DebugAdapterProxyState.Connected) {
+            // check if it's a disconnect request
+            if ((message as DAP.ProtocolMessage)?.type === 'request' && (message as DAP.Request)?.command === 'disconnect') {
+                let response = new Response(message as DAP.Request);
+                response.success = true;
+                this.sendMessageToClient(response);
+                this.stop();
+                return;
+            }
             this._onConnected.event(() => {
                 if (!this.handleMessageFromClient) {
                     throw new Error('handleMessageFromClient is undefined');
