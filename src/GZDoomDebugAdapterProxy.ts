@@ -43,7 +43,7 @@ const colorCodeToHexMap = {
     "E": '#A52A2A', // BROWN
     "F": '#FFD700', // GOLD
     "G": '#FF0000', // RED
-    "H": '#0000FF', // BLUE
+    "H": '#3838FF', // BLUE
     "I": '#FFA500', // ORANGE
     "J": '#FFFFFF', // WHITE
     "K": '#FFFF00', // YELLOW
@@ -600,12 +600,14 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                     response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
                 }
             }
+            this.sendMessageToClient(response);
         });
     }
 
     protected handleDisconnectRequest(request: DAP.DisconnectRequest): void {
         this.sendRequestToServerWithCB(request, 5000, (_r, _req) => {
             // wait 500ms for the terminate event to fire; otherwise just stop
+            this.sendMessageToClient(_r as DAP.ProtocolMessage);
             setTimeout(() => {
                 this.stop();
             }, 500);
