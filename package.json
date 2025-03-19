@@ -72,7 +72,8 @@
         "onDebugDynamicConfigurations:gzdoom",
         "onLanguage:zscript",
         "onLanguage:acs",
-        "onLanguage:decorate"
+        "onLanguage:decorate",
+        "onLanguage:dehacked"
     ],
     "contributes": {
         "languages": [
@@ -266,6 +267,22 @@
                     "defcvars"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
+            },
+            {
+                "id": "dehacked",
+                "aliases": [
+                    "DEHACKED",
+                    "dehacked"
+                ],
+                "extensions": [
+                    ".deh",
+                    ".bex"
+                ],
+                "filenames": [
+                    "DEHACKED",
+                    "dehacked"
+                ],
+                "configuration": "./configurations/DehackedConfiguration.json"
             },
             {
                 "id": "dmxgus",
@@ -643,6 +660,11 @@
                 "language": "decorate",
                 "scopeName": "source.decorate",
                 "path": "./syntaxes/decorate.tmLanguage.json"
+            },
+            {
+                "language": "dehacked",
+                "scopeName": "source.dehacked",
+                "path": "./syntaxes/dehacked.tmLanguage.json"
             },
             {
                 "language": "mapinfolike",

@@ -1,0 +1,200 @@
+{
+    "name": "Dehacked",
+    "scopeName": "source.dehacked",
+    "fileTypes": ["deh", "bex"],
+    "repository": {
+        "bit-flags": {
+            "patterns": [{
+                "name": "constant.enum.flag.dehacked",
+                "match": "\\b(SOLID|SHOOTABLE|COUNTKILL|NOGRAVITY|SPAWNCEILING|NOBLOOD|CORPSE|FLOAT|TELEPORT|MISSILE|DROPOFF|SHADOW|NOBLOCKMAP|AMBUSH|JUSTHIT|COUNTITEM|TRANSLUCENT|BOUNCES|FRIEND|NOSECTOR|SPECIAL|TOUCHY|SLIDE|PICKUP|NOTDMATCH|DROPPED|JUSTATTACKED|INFLOAT|SKULLFLY|TRANSLATION1|TRANSLATION2|LOGRAV|NOSPLASH|NOSTRAFE|NORESPAWN|ALWAYSRESPAWN|REMOVEDEAD|NOTHRUST|NOCROSS|JUMPDOWN|PUSHABLE|MAP07BOSS1|MAP07BOSS2|E1M8BOSS|E2M8BOSS|E3M8BOSS|BOSS|E4M6BOSS|E4M8BOSS|FOOTCLIP|FLOATBOB|DONTDRAW|SHORTMRANGE|LONGMELEE|RANGEHALF|HIGHERMPROB|CANTLEAVEFLOORPIC|SPAWNFLOAT|INVULNERABLE|DORMANT|SEEKERMISSILE|DEFLECTIVE|REFLECTIVE|GHOST|THRUGHOST|NODMGTHRUST|ACTSEESOUND|LOUDACTIVE|E5M8BOSS|DMGIGNORED|BOSSIGNORE|SLIDE|TELESTOMP|WINDTHRUST|FIREDAMAGE|KILLABLE|DEADFLOAT|NOTHRESHOLD|FLOORMISSILE|SUPERITEM|NOITEMRESP|SUPERFRIEND|INVULNCHARGE|EXPLOCOUNT|CANNOTPUSH|TLSTYLEADD|SPACMONSTER|SPACMISSILE|NOFRIENDDMG|3DDECORATION|ALWAYSFAST|PASSMOBJ|DONTOVERLAP)\\b"
+            }]
+        },
+        "flag-operators": {
+            "patterns": [{
+                "name": "keyword.operator.flag.dehacked",
+                "match": "\\+|\\||\\,"
+            }]
+        },
+        "numeric-value": {
+            "patterns": [{
+                "name": "constant.numeric.dehacked",
+                "match": "-?\\d+"
+            }]
+        },
+        "string-value": {
+            "patterns": [{
+                "name": "string.quoted.double.dehacked",
+                "begin": "\"",
+                "end": "\"",
+                "patterns": [
+                    {
+                        "name": "constant.character.escape.dehacked",
+                        "match": "\\\\."
+                    }
+                ]
+            }, {
+                "name": "string.unquoted.dehacked",
+                "match": "[^\\s=]+"
+            }]
+        },
+        "boolean-value": {
+            "patterns": [{
+              "name": "constant.language.boolean.dehacked",
+              "match": "(?i)\\b(true|false|NULL)\\b"
+            }]
+          },
+        "line-continuation": {
+            "patterns": [{
+                "name": "constant.character.escape.line-continuation.dehacked",
+                "match": "\\\\$"
+            }]
+        },
+        "property-definition": {
+            "patterns": [{
+                "name": "property.dehacked",
+                "match": "^\\s*([^=]+?)\\s*=\\s*(.+?)\\s*(?:\\\\)?$",
+                "captures": {
+                    "1": { "name": "variable.other.dehacked" },
+                    "2": {
+                        "patterns": [
+                            { "include": "#numeric-value" },
+                            { "include": "#bit-flags" },
+                            { "include": "#flag-operators" },
+                            { "include": "#string-value" },
+                            { "include": "#boolean-value" }
+                        ]
+                    }
+                }
+            }]
+        },
+        "comments": {
+            "patterns": [
+              {
+                "name": "comment.line.number-sign.dehacked",
+                "begin": "^\\s*#",
+                "end": "$",
+                "beginCaptures": {
+                  "0": { "name": "comment.line.number-sign.dehacked" }
+                },
+                "endCaptures": {
+                  "0": { "name": "comment.line.number-sign.dehacked" }
+                }
+              },
+              {
+                "name": "comment.line.editor.dehacked",
+                "begin": "^\\s*#\\$",
+                "end": "$",
+                "beginCaptures": {
+                  "0": { "name": "comment.line.editor.dehacked" }
+                },
+                "endCaptures": {
+                  "0": { "name": "comment.line.editor.dehacked" }
+                }
+              }
+            ]
+          },
+        "section-headers": {
+            "patterns": [{
+                "name": "entity.name.section.dehacked",
+                "match": "^\\s*\\[(CODEPTR|PARS|STRINGS|SPRITES|SOUNDS|MUSIC|HELPER)\\](\\s*#.*)?\\s*$",
+                "captures": {
+                    "1": { "name": "keyword.control.section.dehacked" },
+                    "2": { "name": "invalid.illegal.comment.dehacked"}
+                }
+            }]
+        },
+        "block-headers": {
+            "patterns": [{
+                "name": "entity.name.type.block.dehacked",
+                "match": "^\\s*(Pointer|Thing|Frame|Sprite|Sound|Ammo|Weapon|Cheat|Misc|Text)\\s+(\\d+)(?:\\s*\\((.+)\\))?(\\s*#.*)?\\s*$",
+                "captures": {
+                    "1": { "name": "keyword.control.block.dehacked" },
+                    "2": { "name": "constant.numeric.dehacked" },
+                    "3": { "name": "string.unquoted.dehacked" },
+                    "4": { "name": "invalid.illegal.comment.dehacked"}
+                }
+            }]
+        }
+    },
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#section-headers" },
+        { "include": "#block-headers" },
+        {
+            "name": "meta.header.dehacked",
+            "begin": "^\\s*(Patch File for DeHackEd v)(\\d+\\.\\d+)\\s*$",
+            "end": "^$",
+            "beginCaptures": {
+                "1": { "name": "keyword.other.patch-directive.dehacked" },
+                "2": { "name": "keyword.other.dehacked-version.dehacked" }
+            },
+            "patterns": [
+                {
+                    "name": "meta.header-field.dehacked",
+                    "match": "^(Doom version|Patch format)\\s*=\\s*(\\d+)$",
+                    "captures": {
+                        "1": { "name": "variable.other.header.dehacked" },
+                        "2": { "name": "constant.numeric.dehacked" }
+                    }
+                },
+                {
+                    "include": "#comments"
+                }
+
+            ]
+        },
+        { "include": "#line-continuation" },
+        {
+        "name": "declaration.codepointer.dehacked",
+        "match": "^\\s*[Ff][rR][aA][mM][eE]\\s+(\\d+)\\s*=\\s*(?:(NULL)|([A-Za-z_][\\d_\\w]+))\\s*([^\\s]+.*)?$",
+        "captures": {
+            "0": { "name": "storage.type.dehacked" },
+            "1": { "name": "constant.numeric.dehacked" },
+            "2": { "name": "constant.language.boolean.dehacked" },
+            "3": { "name": "entity.name.function.dehacked" },
+            "4": { "name": "invalid.illegal.comment.dehacked"}
+        }
+        },
+        {
+        "name": "declaration.par.dehacked",
+        "match": "^\\s*par\\s+(\\d+)\\s+(\\d+)(\\s*#.*)?\\s*$",
+        "captures": {
+            "0": { "name": "storage.type.dehacked" },
+            "1": { "name": "constant.numeric.dehacked" },
+            "2": { "name": "constant.numeric.dehacked" },
+            "3": { "name": "invalid.illegal.comment.dehacked"}
+        }
+        },
+        {
+            "name": "invalid.illegal.comment.dehacked",
+            "match": "//.*$",
+            "captures": {
+                "0": { "name": "invalid.illegal.comment.dehacked" }
+            }
+        },
+        { "include": "#property-definition" },
+        {
+            "name": "declaration.string.dehacked",
+            "match": "^\\s*([A-Z0-9_]+)\\s*=\\s*(.+)$",
+            "captures": {
+                "0": { "name": "storage.type.dehacked" },
+                "1": { "name": "variable.other.dehacked" },
+                "2": { "name": "string.quoted.double.dehacked" }
+            }
+        },
+        {
+            "name": "directive.include.dehacked",
+            "match": "^\\s*([Ii][Nn][Cc][Ll][Uu][Dd][Ee])(\\s+[Nn][Oo][Tt][Ee][Xx][Tt])?\\s+(?:(\".+\")|(\\S+))(\\s*#.*)?\\s*$",
+            "captures": {
+                "1": { "name": "keyword.control.include.dehacked" },
+                "2": { "name": "keyword.control.include.notext.dehacked" },
+                "3": { "name": "string.quoted.double.dehacked" },
+                "4": { "name": "string.unquoted.dehacked" },
+                "5": { "name": "invalid.illegal.comment.dehacked"}
+            }
+        }
+
+
+
+    ]
+}
