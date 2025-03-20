@@ -4,13 +4,14 @@
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
-import { DebugLauncherService, DebugLaunchState } from './DebugLauncherService';
-import { DEFAULT_PORT, ProjectItem } from './GZDoomGame';
+import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLauncherService';
+import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, ProjectItem } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 
 const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
+
 const foldingRegionStart = /^\s*(?:(?:\[(CODEPTR|PARS|STRINGS|SPRITES|SOUNDS|MUSIC|HELPER)\])|(?:(Pointer|Thing|Frame|Sprite|Sound|Ammo|Weapon|Cheat|Misc|Text)\s+(\d+)(?:\s*\((.+)\))?))(\s*(?:#|\/\/).*)?\s*$/i;
 export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 	// register a configuration provider for 'gzdoom' debug type
@@ -110,6 +111,7 @@ const sleep = (time: number) => {
 }
 
 
+
 function cancellableWindow(title: string, timeout: number, timeoutMessage?: string, ourCancellationToken?: CancellationToken) {
     return vscode.window.withProgress({
         title: title,
@@ -140,6 +142,9 @@ function cancellableWindow(title: string, timeout: number, timeoutMessage?: stri
 const noopExecutable = new vscode.DebugAdapterExecutable('node', ['-e', '""']);
 
 class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    // map of session id to previous command
+    private previousCmd: Map<string, LaunchCommand> = new Map();
+
     async ensureGameRunning(port: number) {
         if (!(await debugLauncherService.getGameIsRunning()) || !(await debugLauncherService.waitForPort(port, 1000))) {
 
@@ -169,15 +174,59 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             result = await debugLauncherService.waitForPort(port, 60000, () => {
                 return !resolved;
             });
-            cancellationSource.cancel();
             // i.e. the user didn't cancel the window
             if (!resolved) {
+                cancellationSource.cancel();
                 return result;
             }
             return false;
         }
         // sleep(1000);
         return true;
+    }
+
+    async resolveProjects(projects: ProjectItem[], launchCommand?: LaunchCommand, cwd?: string): Promise<ProjectItem[]> {
+        if (!launchCommand && !cwd) {
+            throw new Error(`No launch command or cwd provided.`);
+        }
+        for (let project of projects) {
+            if (!project.archive) {
+                throw new Error(`Project archive for '${project.path}' does not exist.`);
+            }
+
+            if (!path.isAbsolute(project.archive)) {
+                let _cwd = cwd || launchCommand?.cwd;
+                if (_cwd && project.archive != _cwd) {
+                    project.archive = path.join(_cwd, project.archive);
+                } else if (launchCommand) {
+                    // find the `-file`, `<file>` in each of the launchCommand.args and see if it ends with the project.archive
+                    for (let i = 0; i < launchCommand.args.length; i++) {
+                        let arg = launchCommand.args[i];
+                        if (arg == '-file' && i + 1 < launchCommand.args.length) {
+                            arg = launchCommand.args[i + 1];
+                            i++;
+                            if (arg.toLowerCase().trim().endsWith(project.archive.toLowerCase().trim())) {
+                                project.archive = arg;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            project.archive = path.normalize(project.archive);
+
+            if (!await workspaceFileAccessor.isDirectory(project.archive) && !await workspaceFileAccessor.isFile(project.archive) && !isBuiltinPK3File(project.archive)) {
+                throw new Error(`Project archive '${project.archive}' could not be found.`);
+            }
+            if (project.archive == project.path || await workspaceFileAccessor.isDirectory(project.archive)) {
+                if (!project.archive.endsWith(path.sep)) {
+                    project.archive += path.sep;
+                }
+            }
+
+        }
+        return projects;
     }
 
 	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
@@ -194,9 +243,6 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             ]
         }
         options.port = options.port || DEFAULT_PORT;
-        if (!options.cwd) {
-            options.cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        }
 
         let projects: ProjectItem[] = options.projects?.map(project => {
             if (typeof project === 'string') {
@@ -205,11 +251,6 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             if (!project.archive) {
                 project.archive = project.path;
             }
-            // if the archive is relative, make it absolute
-            if (!path.isAbsolute(project.archive) && project.archive != options.cwd) {
-                project.archive = path.join(options.cwd, project.archive);
-            }
-            // check if it exists
             return project;
         });
         if (!projects || projects.length === 0) {
@@ -218,26 +259,36 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 		options.startNow = true;
         options.consoleLogLevel = 'debug';
 		let launched: DebugLaunchState = DebugLaunchState.success;
-		if (options.request === 'launch') {
-			// check relative path
-            for (let project of projects) {
-                if (!await workspaceFileAccessor.isDirectory(project?.archive || '') && !await workspaceFileAccessor.isFile(project?.archive || '')) {
-                    vscode.window.showErrorMessage(`Project archive path '${project.archive}' does not exist.`);
-                    _session.configuration.noop = true;
-                    return noopExecutable;
+        let launchCommand: LaunchCommand | undefined = undefined;
+        let reattach = false;
+        try {
+            if (options.request === 'attach' && this.previousCmd.has(_session.id)) {
+                reattach = true;
+                launchCommand = this.previousCmd.get(_session.id);
+                projects = await this.resolveProjects(projects, launchCommand!);
+            } else if (options.request === 'launch') {
+                if (!options.cwd) {
+                    options.cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
                 }
-
+                projects = await this.resolveProjects(projects, undefined, options.cwd);
+                launchCommand = debugLauncherService.getLaunchCommand(
+                    options.gzdoomPath,
+                    options.iwad,
+                    projects.map(p => typeof p === 'string' ? p : (p.archive || '')),
+                    options.port,
+                    options.map,
+                    options.configPath,
+                    options.additionalArgs,
+                    options.cwd
+                );
             }
-			const launchCommand = debugLauncherService.getLaunchCommand(
-				options.gzdoomPath,
-				options.iwad,
-                projects.map(p => typeof p === 'string' ? p : (p.archive || '')),
-				options.port,
-				options.map,
-				options.configPath,
-				options.additionalArgs,
-				options.cwd
-			);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error resolving projects: ${error}`);
+            _session.configuration.noop = true;
+            return noopExecutable;
+        }
+
+        if (options.request === 'launch' || reattach) {
 			const cancellationSource = new vscode.CancellationTokenSource();
 			const cancellationToken = cancellationSource.token;
 			const port = options.port || DEFAULT_PORT;
@@ -245,7 +296,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 				`Waiting for gzdoom to start...`,
 				30000
 			);
-            launched = await debugLauncherService.runLauncher(launchCommand, port, cancellationToken);
+            launched = await debugLauncherService.runLauncher(launchCommand!, port, cancellationToken);
 			wait_message.dispose();
 		}
 		if (launched != DebugLaunchState.success) {
@@ -253,37 +304,34 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 				_session.configuration.noop = true;
 				return noopExecutable;
 			}
+            let errMessage = `'gzdoom' failed to launch.`;
 			if (launched === DebugLaunchState.multipleGamesRunning) {
-				const errMessage = `Multiple gzdoom instances are running, shut them down and try again.`;
-				vscode.window.showErrorMessage(errMessage);
+                errMessage = `Multiple gzdoom instances are running, shut them down and try again.`;
 			}
 			// throw an error indicating the launch failed
-			throw new Error(`'gzdoom' failed to launch.`);
-			// attach
-        } else if (!(await this.ensureGameRunning(options.port))) {
-			_session.configuration.noop = true;
-			return noopExecutable;
-		}
+            throw new Error(errMessage);
+        } else { // attach
+            if (!(await this.ensureGameRunning(options.port))) {
+                _session.configuration.noop = true;
+                return noopExecutable;
+            } else {
+                let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
+                if (launchCommand) {
+                    projects = await this.resolveProjects(projects, launchCommand);
+                    this.previousCmd.set(_session.id, launchCommand);
+                }
+            }
+        }
         options.projects = projects;
 		var config = options as GZDoomDebugAdapterProxyOptions;
 		config.launcherProcess = debugLauncherService.launcherProcess;
 
-        for (let project of config.projects) {
-            if (typeof project === 'string' || !project.archive) {
-                throw new Error('Project archive path is required.');
-            }
-            let isProjectArchiveDirectory = project.archive == project.path || await workspaceFileAccessor.isDirectory(project.archive);
-            if (isProjectArchiveDirectory) {
-                project.archive = project.archive;
-                if (!project.archive.endsWith('/')) {
-                    project.archive += '/';
-                }
-            } else {
-                project.archive = path.basename(project.archive);
-            }
-        }
+
+        config.startNow = false;
+        let proxy = new GZDoomDebugAdapterProxy(workspaceFileAccessor, config);
+        proxy.start();
 		return new vscode.DebugAdapterInlineImplementation(
-            new GZDoomDebugAdapterProxy(workspaceFileAccessor, config)
+            proxy
 		);
 	}
 }

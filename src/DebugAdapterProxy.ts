@@ -418,7 +418,6 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
         this.loggerConsole = new ConsoleLogger();
         this.loggerConsole.level = this.consoleLogLevel;
         if (options.startNow) this.start();
-        this.loginfo('Started.');
     }
 
     protected getLogFilePath(logDir: string) {
@@ -497,6 +496,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     }
 
     public start() {
+        this.loginfo('Started Debug Adapter Proxy.');
         this.currentState = DebugAdapterProxyState.Connecting;
         // set a timeout that kills the server if no connection is established within 12 seconds
         this.connectionTimeout = setTimeout(() => {
@@ -542,6 +542,9 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     }
 
     public stop() {
+        if (!this) {
+            return;
+        }
         if (this.currentState === DebugAdapterProxyState.Connected) {
             this.loginfo('Stopping...');
         } else if (this.currentState === DebugAdapterProxyState.Stopping || this.currentState === DebugAdapterProxyState.Disconnected) {

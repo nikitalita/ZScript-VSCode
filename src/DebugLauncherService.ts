@@ -2,6 +2,8 @@ import { CancellationToken, CancellationTokenSource, window } from 'vscode';
 import { ChildProcess, spawn } from 'node:child_process';
 import waitPort from 'wait-port';
 import procList from 'ps-list';
+import findProcess from 'find-process';
+import { lsof, ProcessInfo } from 'list-open-files';
 
 export enum DebugLaunchState {
     success,
@@ -18,6 +20,7 @@ export interface IDebugLauncherService {
         portToCheck: number,
         cancellationToken?: CancellationToken
     ): Promise<DebugLaunchState>;
+    getLaunchCommandFromRunningProcess(port: number): Promise<LaunchCommand | undefined>;
 }
 
 export interface LaunchCommand {
@@ -59,6 +62,54 @@ export class DebugLauncherService implements IDebugLauncherService {
         return gameProcesses.map((p) => p.pid);
     }
 
+    async getLaunchCommandFromRunningProcess(port: number): Promise<LaunchCommand | undefined> {
+        let process = await findProcess('port', port);
+        if (process.length === 0) {
+            // just look for "gzdoom"
+            process = await findProcess('name', GAME_NAME);
+            if (process.length === 0) {
+                return undefined;
+            } else if (process.length > 1) {
+                console.error(`Found multiple gzdoom processes running on port ${port}`);
+            }
+        }
+        let argv: string[] = []
+        // we need to split on spaces, but not between single or double quotes
+        let quote = '';
+        let currentArg = '';
+        for (let char of process[0]?.cmd || '') {
+            if (char === '"' || char === "'") {
+                if (quote === '') {
+                    quote = char;
+                } else if (char === quote) {
+                    quote = '';
+                    char = ' ';
+                }
+            }
+            if (char === ' ' && quote === '') {
+                if (currentArg) {
+                    argv.push(currentArg);
+                    currentArg = '';
+                }
+            } else {
+                currentArg += char;
+            }
+        }
+        if (currentArg) {
+            argv.push(currentArg);
+        }
+        let launchCommand: LaunchCommand = {
+            command: argv[0],
+            args: argv.slice(1)
+        }
+        let thing: ProcessInfo[] = await lsof({ pids: [process[0]?.pid] })
+        if (thing.length == 0) {
+            return launchCommand;
+        }
+        launchCommand.cwd = thing[0].process.cwd?.name || "";
+        return launchCommand;
+    }
+
     async tearDownAfterDebug() {
         // If MO2 was already opened by the user before launch, the process would have detached and this will be closed anyway
         if (this.launcherProcess) {
@@ -75,13 +126,25 @@ export class DebugLauncherService implements IDebugLauncherService {
         }
 
         if (await this.getGameIsRunning()) {
-            try {
                 let pids = await this.getGamePIDs();
+            let retris = 0;
+            while (pids.length > 0 && retris < 5) {
                 for (let pid of pids) {
-                    process.kill(pid);
+                    try {
+                        if (retris == 0) {
+                            process.kill(pid);
+                        } else {
+                            process.kill(pid, 'SIGKILL');
+                        }
+                    } catch (e) {
+                        /* empty */
+                    }
                 }
-            } catch (e) {
-                /* empty */
+                retris++;
+                pids = await this.getGamePIDs();
+            }
+            if (pids.length > 0) {
+                console.error(`Failed to kill game process after 5 retries`);
             }
         }
 
@@ -197,12 +260,12 @@ export class DebugLauncherService implements IDebugLauncherService {
         this.launcherProcess = spawn(cmd, args, {
             cwd: launcherCommand.cwd,
         });
-        // this.launcherProcess.stdout?.on('data', (data) => {
-        //     console.log(data.toString());
-        // });
-        // this.launcherProcess.stderr?.on('data', (data) => {
-        //     console.error(data.toString());
-        // });
+        this.launcherProcess.stdout?.on('data', (data) => {
+            console.log(data.toString());
+        });
+        this.launcherProcess.stderr?.on('data', (data) => {
+            console.error(data.toString());
+        });
         if (!this.launcherProcess || !this.launcherProcess.stdout || !this.launcherProcess.stderr) {
             window.showErrorMessage(`Failed to start launcher process.\ncmd: ${cmd}\nargs: ${args.join(' ')}`);
             return DebugLaunchState.launcherError;

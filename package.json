@@ -49,6 +49,8 @@
     "dependencies": {
         "@types/lodash.get": "^4.4.9",
         "chalk": "^5.3.0",
+        "find-process": "^1.4.10",
+        "list-open-files": "^1.1.0",
         "lodash.get": "^4.4.2",
         "pino": "^8.15.1",
         "pino-pretty": "^10.2.0",
@@ -843,15 +845,18 @@
             },
             {
                 "language": "decorate"
+            },
+            {
+                "language": "dehacked"
             }
         ],
         "debuggers": [
             {
                 "type": "gzdoom",
-
-                "languages":[
+                "languages": [
                     "zscript",
-                    "decorate"
+                    "decorate",
+                    "dehacked"
                 ],
                 "label": "GZDoom",
                 "runtime": "node",
@@ -866,7 +871,9 @@
                             "projects": {
                                 "type": "array",
                                 "description": "Either the root folder(s) of the project(s) or a mapping of paths to their corresponding archive names (e.g. [{path: '${workspaceFolder}', archive: 'project.pk3'}, ...])",
-                                "default": ["${workspaceFolder}"]
+                                "default": [
+                                    "${workspaceFolder}"
+                                ]
                             }
                         }
                     },
@@ -884,9 +891,11 @@
                             "projects": {
                                 "type": "array",
                                 "description": "Either the root folder(s) of the project(s) or a mapping of paths to their corresponding archive names (e.g. [{path: '${workspaceFolder}', archive: 'project.pk3'}, ...])",
-                                "default": ["${workspaceFolder}"]
+                                "default": [
+                                    "${workspaceFolder}"
+                                ]
                             },
-                            "iwad":{
+                            "iwad": {
                                 "type": "string",
                                 "description": "Path to the IWAD to use"
                             },
@@ -910,7 +919,6 @@
                                 "description": "Working directory to use",
                                 "default": "${workspaceFolder}"
                             }
-
                         }
                     }
                 },
@@ -932,18 +940,17 @@
                         }
                     },
                     {
-                      "label": "GZDoom: Attach",
-                      "description": "Debug the current GZDoom project",
-                      "body": {
-                        "type": "gzdoom",
-                        "name": "gzdoom Attach",
-                        "request": "attach",
-                        "port": 19021,
-                        "projectPath": "${workspaceFolder}"
-                      }
+                        "label": "GZDoom: Attach",
+                        "description": "Debug the current GZDoom project",
+                        "body": {
+                            "type": "gzdoom",
+                            "name": "gzdoom Attach",
+                            "request": "attach",
+                            "port": 19021,
+                            "projectPath": "${workspaceFolder}"
+                        }
                     }
                 ]
-
             }
         ]
     },

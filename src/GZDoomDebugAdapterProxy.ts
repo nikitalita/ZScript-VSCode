@@ -330,6 +330,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.logServerToProxy = 'silent'; // we take care of this ourselves
         this.logProxyToClient = 'trace';
     }
+
+    processProjectItems(options: GZDoomDebugAdapterProxyOptions) {
+    }
+
     clearExecutionState() {
     }
 
@@ -476,23 +480,33 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     }
 
     protected async scanProjectDirectoryForFiles(projectDirectories: ProjectItem[]) {
-        // these types of files:
-        // (ext == ".zs" || ext == ".zsc" || ext == ".zc" || ext == ".acs" || ext == ".dec")
-        // also files named exactly this:
-        // (entry.path().filename() == "DECORATE" || entry.path().filename() == "ACS")
-        // roots:
-        const projects = projectDirectories;
-        projects.sort((a, b) => b.path.length - a.path.length);
+        for (let project of projectDirectories) {
+            if (typeof project === 'string' || !project.archive) {
+                throw new Error('Project archive path is required.');
+            }
+            let isProjectArchiveDirectory = project.archive == project.path || this.workspaceFileAccessor.isDirectory(project.archive);
+            if (isProjectArchiveDirectory) {
+                project.archive = project.archive;
+                if (!project.archive.endsWith(path.sep)) {
+                    project.archive += path.sep;
+                }
+            } else {
+                project.archive = path.basename(project.archive);
+            }
+        }
+        this.projects = projectDirectories;
+        this.projects.sort((a, b) => b.path.length - a.path.length);
         const roots = projectDirectories.map((x) => x.path);
-        const file_glob = '**/*.{zs,zsc,zc,acs,dec}';
+        const file_glob = '**/*.{zs,zsc,zc,acs,dec,deh}';
         // load the project directory
         const thing = await this.workspaceFileAccessor.findFiles(file_glob, '**/node_modules/**', 100000, true, roots);
         const decorates = await this.workspaceFileAccessor.findFiles('**/DECORATE', '**/node_modules/**', 100000, true, roots);
         const acs = await this.workspaceFileAccessor.findFiles('**/ACS', '**/node_modules/**', 100000, true, roots);
-        const combined = thing.concat(decorates).concat(acs);
+        const dehacked = await this.workspaceFileAccessor.findFiles('**/DEHACKED', '**/node_modules/**', 100000, true, roots);
+        const combined = thing.concat(decorates).concat(acs).concat(dehacked);
         let items = combined.map((x) => {
             // find the project directory this starts with
-            const projectItem = projects.find((y) => x.startsWith(y.path));
+            const projectItem = this.getProjectBySrcPath(x);
             const item = { path: x, origin: projectItem } as SourceItem;
             return [x, item] as [string, SourceItem];
         });
@@ -592,13 +606,10 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                 let project = this.getProjectByArchive(response.body.sources[i].origin || "");
                 let sourcePath = response.body.sources[i].path;
                 if (sourcePath && project && !this.findSourceItemByPathAndOrigin(sourcePath || "", project!.archive || "")) {
-                    response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
-                    // add the source path to the source paths
-                    sourcePath = response.body.sources[i].path || "";
-                    this.sourcePaths.set(sourcePath, { path: sourcePath, origin: project });
-                } else {
-                    response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
+                    let absPath = path.join(project.path, sourcePath);
+                    this.sourcePaths.set(absPath, { path: absPath, origin: project });
                 }
+                response.body.sources[i] = this.convertDebuggerSourceToClient(response.body.sources[i] as DAP.Source, project);
             }
             this.sendMessageToClient(response);
         });
@@ -700,106 +711,6 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         });
     }
 
-
-    // handleEvaluateRequest(request: DAP.EvaluateRequest) {
-    //     try {
-    //         const expr = request.arguments.expression.trim();
-    //         if (request.arguments.context == 'repl') {
-    //             if (expr.startsWith(this.SEND_TO_SERVER_CMD)) {
-    //                 this.handleREPLSendToServer(request);
-    //                 return;
-    //             }
-    //         }
-    //         // Straight-up expression, make a value request
-    //         // TODO: Not implemented yet
-    //         this.sendErrorResponse(
-    //             new Response(request),
-    //             1109,
-    //             'Evaluation of values is not implemented',
-    //             null,
-    //             ErrorDestination.Telemetry
-    //         );
-    //     } catch (e) {
-    //         this.sendErrorResponse(
-    //             new Response(request),
-    //             1109,
-    //             'Invalid expression in REPL message!',
-    //             null,
-    //             ErrorDestination.Telemetry
-    //         );
-    //     }
-    // }
-
-    // Using this for debugging/RE; in the debug console of the client, you can type in server requests and they will be sent to the server
-    // private handleREPLSendToServer(evalRequest: DAP.EvaluateRequest) {
-    //     try {
-    //         const expr = evalRequest.arguments.expression.trim();
-    //         const messageToSend: DAP.ProtocolMessage = JSON.parse(expr.replace(this.SEND_TO_SERVER_CMD, '').trim());
-    //         //check that it's a valid DAP.ProtocolMessage
-    //         // make sure we have a valid sequence number
-    //         messageToSend.seq = 10000 + this.currentSeq;
-    //         if (messageToSend.type) {
-    //             // send it to the server
-    //             this.loginfo('!!!PROXY->SERVER - Sending message from REPL console to server!!!');
-    //             if (messageToSend.type == 'request') {
-    //                 const sreq = messageToSend as DAP.Request;
-    //                 if (!sreq.command) {
-    //                     this.sendErrorResponse(
-    //                         new Response(evalRequest),
-    //                         1105,
-    //                         'Invalid server request!',
-    //                         null,
-    //                         ErrorDestination.User
-    //                     );
-    //                 }
-    //                 // special handler for variableRequest
-    //                 if (
-    //                     sreq.command == 'variables' &&
-    //                     sreq?.arguments?.hasOwnProperty('root') &&
-    //                     sreq?.arguments?.hasOwnProperty('path')
-    //                 ) {
-    //                     // formatted correctly, send it to the server
-    //                     this.sendRequestToServerWithCB(sreq as DAP.VariablesRequest, 10000, (r, req) => {
-    //                         // this was sent from a REPL
-    //                         if (r.success != false) {
-    //                             // failed responses will show in the REPL console by themselves
-    //                             this.emitOutputEvent(
-    //                                 `Response to REPL variables request (path: ${req.arguments.path.join(
-    //                                     '.'
-    //                                 )}):\n${colorize_message(r.body.variables)}`,
-    //                                 'console'
-    //                             );
-    //                         }
-    //                         // TODO: do something else other than sending the response straight back
-    //                         this.sendMessageToClient(r);
-    //                         return;
-    //                     });
-    //                 } else {
-    //                     this.handleClientRequest(sreq);
-    //                 }
-    //             } else {
-    //                 this.sendMessageToServer(messageToSend as DAP.ProtocolMessage);
-    //             }
-    //         } else {
-    //             this.sendErrorResponse(
-    //                 new Response(evalRequest),
-    //                 1106,
-    //                 'Invalid server message!',
-    //                 null,
-    //                 ErrorDestination.User
-    //             );
-    //         }
-    //     } catch (e) {
-    //         this.sendErrorResponse(
-    //             new Response(evalRequest),
-    //             1107,
-    //             'Invalid JSON in REPL Send to Server command!',
-    //             e,
-    //             ErrorDestination.Telemetry
-    //         );
-    //     }
-    // }
-
     /**
      * Just pass it through to the server
      */
@@ -811,7 +722,13 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         return this.projects.find(p => srcPath.toLowerCase().startsWith(p.path.toLowerCase()));
     }
     private getProjectByArchive(origin: string): ProjectItem | undefined {
-        return this.projects.find(p => origin.toLowerCase() == p.archive?.toLowerCase());
+        let ret = this.projects.find(p => origin.toLowerCase() == p.archive?.toLowerCase());
+        if (!ret && origin.includes(":")) {
+            // split and take last
+            let parts = origin.split(":");
+            ret = this.projects.find(p => parts[parts.length - 1].toLowerCase() == p.archive?.toLowerCase());
+        }
+        return ret;
     }
 
     private convertClientSourceToDebugger(Source: DAP.Source): DAP.Source {
@@ -842,7 +759,8 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         }
         const sourceItem = this.sourcePaths.get(new_path);
         if (!sourceItem) {
-            Source.path = this.convertDebuggerPathToClient(Source.path);
+            let npath = this.convertDebuggerPathToClient(Source.path);
+            Source.path = (Source?.origin) ? path.join(Source.origin, npath) : npath;
             return Source;
         }
         Source.path = this.convertDebuggerPathToClient(sourceItem.path);
