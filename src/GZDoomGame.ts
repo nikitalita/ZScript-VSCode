@@ -11,7 +11,10 @@ export const WAD_EXTENSIONS = ['wad', 'zip', 'pk3', 'pk7', 'deh', 'bex', "iwad",
 
 export const BUILTIN_PK3_FILES = [
     "gzdoom.pk3",
-    "brightmaps.pk3"
+    "brightmaps.pk3",
+    "lights.pk3",
+    "game_support.pk3",
+    "game_widescreen_gfx.pk3"
 ]
 
 export function isBuiltinPK3File(path: string) {

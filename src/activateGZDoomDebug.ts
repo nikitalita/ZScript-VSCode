@@ -314,7 +314,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             if (!(await this.ensureGameRunning(options.port))) {
                 _session.configuration.noop = true;
                 return noopExecutable;
-            } else {
+            } else if (options.request === 'attach') {
                 let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
                 if (launchCommand) {
                     projects = await this.resolveProjects(projects, launchCommand);

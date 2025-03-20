@@ -484,9 +484,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             if (typeof project === 'string' || !project.archive) {
                 throw new Error('Project archive path is required.');
             }
-            let isProjectArchiveDirectory = project.archive == project.path || this.workspaceFileAccessor.isDirectory(project.archive);
-            if (isProjectArchiveDirectory) {
-                project.archive = project.archive;
+            if (project.archive == project.path || await this.workspaceFileAccessor.isDirectory(project.archive)) {
                 if (!project.archive.endsWith(path.sep)) {
                     project.archive += path.sep;
                 }
