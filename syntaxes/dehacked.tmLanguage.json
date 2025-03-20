@@ -113,7 +113,18 @@
                     "3": { "name": "string.unquoted.dehacked" },
                     "4": { "name": "invalid.illegal.comment.dehacked"}
                 }
-            }]
+            },
+            {
+                "name": "entity.name.type.block.text.dehacked",
+                "match": "^\\s*(Text)\\s+(\\d+)\\s+(\\d+)(\\s*#.*)?\\s*$",
+                "captures": {
+                    "1": { "name": "keyword.control.block.dehacked" },
+                    "2": { "name": "constant.numeric.dehacked" },
+                    "3": { "name": "constant.numeric.dehacked" },
+                    "4": { "name": "invalid.illegal.comment.dehacked"}
+                }
+            }
+        ]
         }
     },
     "patterns": [
@@ -122,7 +133,7 @@
         { "include": "#block-headers" },
         {
             "name": "meta.header.dehacked",
-            "begin": "^\\s*(Patch File for DeHackEd v)(\\d+\\.\\d+)\\s*$",
+            "begin": "^(Patch File for DeHackEd v)(\\d+\\.\\d+)\\s*$",
             "end": "^$",
             "beginCaptures": {
                 "1": { "name": "keyword.other.patch-directive.dehacked" },
