@@ -16,7 +16,7 @@ const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
 let wadFileSystemProvider: WadFileSystemProvider | null = null;
 let pk3FileSystemProvider: Pk3FSProvider | null = null;
-const foldingRegionStart = /^\s*(?:(?:\[(CODEPTR|PARS|STRINGS|SPRITES|SOUNDS|MUSIC|HELPER)\])|(?:(Pointer|Thing|Frame|Sprite|Sound|Ammo|Weapon|Cheat|Misc|Text)\s+(\d+)(?:\s*\((.+)\))?))(\s*(?:#|\/\/).*)?\s*$/i;
+const foldingRegionStart = /^\s*(?:(?:\[(CODEPTR|PARS|STRINGS|SPRITES|SOUNDS|MUSIC|HELPER)\])|(?:Text \d+ \d+)|(?:(Pointer|Thing|Frame|Sprite|Sound|Ammo|Weapon|Cheat|Misc|Text)\s+(\d+)(?:\s*\((.+)\))?))(\s*(?:#|\/\/).*)?\s*$/i;
 export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 	// register a configuration provider for 'gzdoom' debug type
 	const provider = new gzdoomConfigurationProvider();
