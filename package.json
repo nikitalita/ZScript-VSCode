@@ -47,6 +47,9 @@
         "wait-port": "^1.1.0"
     },
     "dependencies": {
+        "tokenizr": "^1.0.0",
+        "@yarnpkg/fslib": "^3.1.2",
+        "@yarnpkg/libzip": "^3.1.1",
         "@types/lodash.get": "^4.4.9",
         "chalk": "^5.3.0",
         "find-process": "^1.4.10",
@@ -70,15 +73,51 @@
         "Programming Languages"
     ],
     "activationEvents": [
+        "workspaceContains:**/*.pk3",
+        "workspaceContains:**/*.wad",
+        "workspaceContains:**/*.iwad",
+        "workspaceContains:**/*.ipk3",
+        "workspaceContains:**/*.ipk7",
+        "onLanguage:pk3",
+        "onFileSystem:pk3",
+        "onLanguage:wad",
+        "onFileSystem:wad",
         "onDebugResolve:gzdoom",
         "onDebugDynamicConfigurations:gzdoom",
         "onLanguage:zscript",
         "onLanguage:acs",
         "onLanguage:decorate",
-        "onLanguage:dehacked"
+        "onLanguage:dehacked",
+        "onStartupFinished"
     ],
+
+
     "contributes": {
         "languages": [
+            {
+                "id": "pk3",
+                "aliases": [
+                  "PK3 Archive",
+                  "PK3"
+                ],
+                "extensions": [
+                  ".pk3",
+                  ".pk7",
+                  ".ipk3",
+                  ".ipk7"
+                ]
+            },
+            {
+                "id": "wad",
+                "aliases": [
+                  "WAD",
+                  "WAD Archive"
+                ],
+                "extensions": [
+                  ".wad",
+                  ".iwad"
+                ]
+            },
             {
                 "id": "zscript",
                 "aliases": [
@@ -952,7 +991,90 @@
                     }
                 ]
             }
+        ],
+        "commands": [
+            {
+              "command": "pk3fs.mountPk3File",
+              "title": "Mount PK3",
+              "category": "PK3"
+            },
+            {
+              "command": "pk3fs.unmountPk3File",
+              "title": "Unmount PK3",
+              "category": "PK3"
+            },
+            {
+              "command": "pk3fs.mountPk3Editor",
+              "title": "Mount the current file as a workspace",
+              "category": "PK3"
+            },
+            {
+              "command": "wad.mountWadFile",
+              "title": "Mount WAD",
+              "category": "WAD"
+            },
+            {
+              "command": "wad.unmountWadFile",
+              "title": "Unmount WAD",
+              "category": "WAD"
+            },
+            {
+              "command": "wad.mountWadEditor",
+              "title": "Mount the current file as a workspace",
+              "category": "WAD"
+            }
+          ],
+        "menus": {
+        "explorer/context": [
+            {
+                "when": "resourceLangId == pk3 && !explorerResourceIsRoot",
+                "command": "pk3fs.mountPk3File",
+                "group": "navigation"
+            },
+            {
+                "when": "resourceLangId == pk3 && explorerResourceIsRoot",
+                "command": "pk3fs.unmountPk3File",
+                "group": "navigation"
+            },
+            {
+                "when": "resourceLangId == wad && !explorerResourceIsRoot",
+                "command": "wad.mountWadFile",
+                "group": "navigation"
+            },
+            {
+                "when": "resourceLangId == wad && explorerResourceIsRoot",
+                "command": "wad.unmountWadFile",
+                "group": "navigation"
+            }
+        ],
+        "commandPalette": [
+            {
+                "when": "false",
+                "command": "pk3fs.mountPk3File"
+            },
+            {
+                "when": "false",
+                "command": "pk3fs.unmountPk3File"
+            },
+            {
+                "when": "false",
+                "command": "wad.mountWadFile"
+            },
+            {
+                "when": "false",
+                "command": "wad.unmountWadFile"
+            },
+            {
+                "when": "editorLangId == pk3",
+                "command": "pk3fs.mountPk3Editor"
+            },
+            {
+                "when": "editorLangId == wad",
+                "command": "wad.mountWadEditor"
+            }
         ]
+        }
+
     },
     "author": {
         "name": "Micila \"Kaptain\" Micillotto",

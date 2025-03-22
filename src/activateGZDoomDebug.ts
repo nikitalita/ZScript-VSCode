@@ -8,10 +8,14 @@ import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLa
 import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, ProjectItem } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
-
+import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
+import { Pk3FSProvider } from './pk3-provider/Pk3FSProvider';
+import { activate as activatePk3Provider } from './pk3-provider/index';
+import { activate as activateWadProvider } from './wad-provider/index';
 const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
-
+let wadFileSystemProvider: WadFileSystemProvider | null = null;
+let pk3FileSystemProvider: Pk3FSProvider | null = null;
 const foldingRegionStart = /^\s*(?:(?:\[(CODEPTR|PARS|STRINGS|SPRITES|SOUNDS|MUSIC|HELPER)\])|(?:(Pointer|Thing|Frame|Sprite|Sound|Ammo|Weapon|Cheat|Misc|Text)\s+(\d+)(?:\s*\((.+)\))?))(\s*(?:#|\/\/).*)?\s*$/i;
 export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 	// register a configuration provider for 'gzdoom' debug type
@@ -48,6 +52,8 @@ export function activateGZDoomDebug(context: vscode.ExtensionContext) {
 		}
 	}, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
 
+    wadFileSystemProvider = activateWadProvider(context);
+    pk3FileSystemProvider = activatePk3Provider(context);
     context.subscriptions.push(vscode.languages.registerFoldingRangeProvider('dehacked', {
         provideFoldingRanges(document, context, token) {
             //console.log('folding range invoked'); // comes here on every character edit
@@ -120,7 +126,6 @@ function cancellableWindow(title: string, timeout: number, timeoutMessage?: stri
     },
         async (progress, token) => {
             return new Promise((async (resolve) => {
-                // You code to process the progress
                 let cancel_func = () => {
                     if (timeoutMessage) {
                         vscode.window.showInformationMessage(timeoutMessage);
@@ -307,8 +312,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             let errMessage = `'gzdoom' failed to launch.`;
 			if (launched === DebugLaunchState.multipleGamesRunning) {
                 errMessage = `Multiple gzdoom instances are running, shut them down and try again.`;
-			}
-			// throw an error indicating the launch failed
+            }
             throw new Error(errMessage);
         } else { // attach
             if (!(await this.ensureGameRunning(options.port))) {
