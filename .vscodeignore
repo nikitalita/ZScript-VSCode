@@ -6,3 +6,4 @@ src/
 tsconfig.json
 webpack.config.js
 .vscode-test-web
+post-build.js
