@@ -301,6 +301,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     private logServerToProxyReal: DAPLogLevel = 'info';
     private workspaceFileAccessor: FileAccessor;
     private projects: ProjectItem[];
+    private loadedModules: DAP.Module[] = [];
 
     // object name to source map
     constructor(fileAccessor: FileAccessor, options: GZDoomDebugAdapterProxyOptions) {
@@ -538,12 +539,19 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                 origin: projectItem.origin.archive,
             });
         });
+        // vscode apparently doesn't do anything with the 'modulesRequest', so we have to send it ourselves
+        this.onSentLaunchRequest.event(() => {
+            const modulesRequest = <DAP.ModulesRequest>new Message('request');
+            modulesRequest.command = 'modules';
+            modulesRequest.arguments = {};
+            this.handleModulesRequest(modulesRequest, false);
+        })
         // send it on
         this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
+            this.launch_request_sent = true;
+            this.onSentLaunchRequest.fire(null);
             this._defaultResponseHandler(r);
         });
-        this.launch_request_sent = true;
-        this.onSentLaunchRequest.fire(null);
     }
 
     protected handleClientRequest(request: DAP.Request): void {
@@ -581,6 +589,8 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                     this.handleLoadedSourcesRequest(<DAP.LoadedSourcesRequest>request);
                 } else if (request.command === 'disassemble') {
                     this.handleDisassembleRequest(<DAP.DisassembleRequest>request);
+                } else if (request.command === 'modules') {
+                    this.handleModulesRequest(<DAP.ModulesRequest>request);
                 } else {
                     this.handleRequestDefault(request);
                 }
@@ -588,6 +598,15 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         } catch (e) {
             this.sendErrorResponse(new Response(request), 1104, '{_stack}', e, ErrorDestination.Telemetry);
         }
+    }
+    protected handleModulesRequest(request: DAP.ModulesRequest, sendToClient: boolean = true) {
+        this.sendRequestToServerWithCB(request, DEFAULT_TIMEOUT, (r, req) => {
+            const response = r as DAP.ModulesResponse;
+            this.loadedModules = response.body.modules;
+            if (sendToClient) {
+                this.sendMessageToClient(response);
+            }
+        });
     }
     findSourceItemByPathAndOrigin(path: string, origin: string): SourceItem | undefined {
         for (let item of this.sourcePaths.values()) {
