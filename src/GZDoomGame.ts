@@ -24,3 +24,16 @@ export function isBuiltinPK3File(path: string) {
 export function isWad(path: string) {
     return WAD_EXTENSIONS.some(ext => path.endsWith(ext));
 }
+
+export function normalizePath(path: string) {
+    // basically like path.normalize but always converts \\ to /
+    path = path.replace(/\\/g, '/');
+    let parts = path.split('/');
+    let result: string[] = [];
+    for (let part of parts) {
+        if (part == '.') continue;
+        if (part == '..') result.pop();
+        else result.push(part);
+    }
+    return result.join('/');
+}

@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
 import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLauncherService';
-import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, ProjectItem } from './GZDoomGame';
+import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
@@ -219,14 +219,14 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
                 }
             }
 
-            project.archive = path.normalize(project.archive);
+            project.archive = normalizePath(project.archive);
 
             if (!await workspaceFileAccessor.isDirectory(project.archive) && !await workspaceFileAccessor.isFile(project.archive) && !isBuiltinPK3File(project.archive)) {
                 throw new Error(`Project archive '${project.archive}' could not be found.`);
             }
             if (project.archive == project.path || await workspaceFileAccessor.isDirectory(project.archive)) {
-                if (!project.archive.endsWith(path.sep)) {
-                    project.archive += path.sep;
+                if (!project.archive.endsWith('/')) {
+                    project.archive += '/';
                 }
             }
 
