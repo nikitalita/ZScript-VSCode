@@ -7,6 +7,7 @@ import { Response, Message } from '@vscode/debugadapter/lib/messages';
 import * as chalk_d from 'chalk';
 import { FileAccessor, Emitter } from './IDEInterface';
 import { ProjectItem } from './GZDoomGame';
+import { Window, windowManager } from "./WindowManager"
 
 export enum ErrorDestination {
     User = 1,
@@ -332,6 +333,24 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.logProxyToClient = 'trace';
     }
 
+    getWindow(): Window | undefined {
+        const windows = windowManager.getWindows();
+        for (const window of windows) {
+            if (window.processId == this.pid) {
+                return window;
+            }
+        }
+        return undefined;
+    }
+
+    focusGameWindow() {
+        const window = this.getWindow();
+        if (!window) {
+            return;
+        }
+        window.bringToTop();
+    }
+
     processProjectItems(options: GZDoomDebugAdapterProxyOptions) {
     }
 
@@ -365,16 +384,19 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             this.logwarn('!!!SERVER->PROXY - Received response with no callback!!!');
             this.sendMessageToClient(response);
         } else if (message.type == 'event') {
-            const event = message as DAP.Event;
+            let event = message as DAP.Event;
             if (event.event == 'output') {
+                // Don't log output events
                 this.handleOutputEvent(event as DAP.OutputEvent);
-            } else if (event.event == 'loadedSource') {
-                const response = event as DAP.LoadedSourceEvent;
-                response.body.source = this.convertDebuggerSourceToClient(response.body.source as DAP.Source);
-                this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
-                this.sendMessageToClient(response);
             } else {
                 this.log(this.logServerToProxyReal, this.getLogObj(message), '---SERVER->PROXY:');
+                if (event.event == 'loadedSource') {
+                    const response = event as DAP.LoadedSourceEvent;
+                    response.body.source = this.convertDebuggerSourceToClient(response.body.source as DAP.Source);
+                    event = response;
+                } else if (event.event == 'continued') {
+                    this.focusGameWindow();
+                }
                 this.sendMessageToClient(event);
             }
         } else {

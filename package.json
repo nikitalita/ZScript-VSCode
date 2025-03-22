@@ -9,7 +9,7 @@
         "compile": "tsc -p ./",
         "lint": "eslint src --ext ts",
         "typecheck": "tsc -p tsconfig.json --noEmit",
-        "esbuild-base": "esbuild ./src/extension.ts --bundle --tsconfig=./tsconfig.json --external:vscode --format=cjs --platform=node --outfile=dist/extension.js",
+        "esbuild-base": "node post-build.js && esbuild ./src/extension.ts --bundle --tsconfig=./tsconfig.json --external:vscode --format=cjs --platform=node --outfile=dist/extension.js",
         "watch": "npm run -S esbuild-base -- --sourcemap --sources-content=false --watch",
         "esbuild-web": "esbuild ./src/web-extension.ts --bundle --tsconfig=./tsconfig.json --external:vscode --format=cjs --platform=browser --outfile=dist/web-extension.js",
         "watch-web": "npm run -S esbuild-web -- --sourcemap --sources-content=false --watch",
@@ -27,6 +27,7 @@
         "@types/node": "^14.14.37",
         "@types/split2": "^4.2.1",
         "@types/vscode": "^1.52.0",
+        "@types/lodash.get": "^4.4.9",
         "@typescript-eslint/eslint-plugin": "^5.17.0",
         "@typescript-eslint/parser": "^5.17.0",
         "@vscode/debugadapter": "^1.56.0",
@@ -47,10 +48,9 @@
         "wait-port": "^1.1.0"
     },
     "dependencies": {
-        "tokenizr": "^1.0.0",
+        "@johnlindquist/node-window-manager": "^1.0.24",
         "@yarnpkg/fslib": "^3.1.2",
         "@yarnpkg/libzip": "^3.1.1",
-        "@types/lodash.get": "^4.4.9",
         "chalk": "^5.3.0",
         "find-process": "^1.4.10",
         "list-open-files": "^1.1.0",
@@ -58,6 +58,7 @@
         "pino": "^8.15.1",
         "pino-pretty": "^10.2.0",
         "split2": "^4.2.0",
+        "tokenizr": "^1.0.0",
         "vscode-languageclient": "^5.2.1"
     },
     "main": "./dist/extension.js",
@@ -90,32 +91,30 @@
         "onLanguage:dehacked",
         "onStartupFinished"
     ],
-
-
     "contributes": {
         "languages": [
             {
                 "id": "pk3",
                 "aliases": [
-                  "PK3 Archive",
-                  "PK3"
+                    "PK3 Archive",
+                    "PK3"
                 ],
                 "extensions": [
-                  ".pk3",
-                  ".pk7",
-                  ".ipk3",
-                  ".ipk7"
+                    ".pk3",
+                    ".pk7",
+                    ".ipk3",
+                    ".ipk7"
                 ]
             },
             {
                 "id": "wad",
                 "aliases": [
-                  "WAD",
-                  "WAD Archive"
+                    "WAD",
+                    "WAD Archive"
                 ],
                 "extensions": [
-                  ".wad",
-                  ".iwad"
+                    ".wad",
+                    ".iwad"
                 ]
             },
             {
@@ -994,87 +993,86 @@
         ],
         "commands": [
             {
-              "command": "pk3fs.mountPk3File",
-              "title": "Mount PK3",
-              "category": "PK3"
-            },
-            {
-              "command": "pk3fs.unmountPk3File",
-              "title": "Unmount PK3",
-              "category": "PK3"
-            },
-            {
-              "command": "pk3fs.mountPk3Editor",
-              "title": "Mount the current file as a workspace",
-              "category": "PK3"
-            },
-            {
-              "command": "wad.mountWadFile",
-              "title": "Mount WAD",
-              "category": "WAD"
-            },
-            {
-              "command": "wad.unmountWadFile",
-              "title": "Unmount WAD",
-              "category": "WAD"
-            },
-            {
-              "command": "wad.mountWadEditor",
-              "title": "Mount the current file as a workspace",
-              "category": "WAD"
-            }
-          ],
-        "menus": {
-        "explorer/context": [
-            {
-                "when": "resourceLangId == pk3 && !explorerResourceIsRoot",
                 "command": "pk3fs.mountPk3File",
-                "group": "navigation"
+                "title": "Mount PK3",
+                "category": "PK3"
             },
             {
-                "when": "resourceLangId == pk3 && explorerResourceIsRoot",
                 "command": "pk3fs.unmountPk3File",
-                "group": "navigation"
+                "title": "Unmount PK3",
+                "category": "PK3"
             },
             {
-                "when": "resourceLangId == wad && !explorerResourceIsRoot",
+                "command": "pk3fs.mountPk3Editor",
+                "title": "Mount the current file as a workspace",
+                "category": "PK3"
+            },
+            {
                 "command": "wad.mountWadFile",
-                "group": "navigation"
+                "title": "Mount WAD",
+                "category": "WAD"
             },
             {
-                "when": "resourceLangId == wad && explorerResourceIsRoot",
                 "command": "wad.unmountWadFile",
-                "group": "navigation"
+                "title": "Unmount WAD",
+                "category": "WAD"
+            },
+            {
+                "command": "wad.mountWadEditor",
+                "title": "Mount the current file as a workspace",
+                "category": "WAD"
             }
         ],
-        "commandPalette": [
-            {
-                "when": "false",
-                "command": "pk3fs.mountPk3File"
-            },
-            {
-                "when": "false",
-                "command": "pk3fs.unmountPk3File"
-            },
-            {
-                "when": "false",
-                "command": "wad.mountWadFile"
-            },
-            {
-                "when": "false",
-                "command": "wad.unmountWadFile"
-            },
-            {
-                "when": "editorLangId == pk3",
-                "command": "pk3fs.mountPk3Editor"
-            },
-            {
-                "when": "editorLangId == wad",
-                "command": "wad.mountWadEditor"
-            }
-        ]
+        "menus": {
+            "explorer/context": [
+                {
+                    "when": "resourceLangId == pk3 && !explorerResourceIsRoot",
+                    "command": "pk3fs.mountPk3File",
+                    "group": "navigation"
+                },
+                {
+                    "when": "resourceLangId == pk3 && explorerResourceIsRoot",
+                    "command": "pk3fs.unmountPk3File",
+                    "group": "navigation"
+                },
+                {
+                    "when": "resourceLangId == wad && !explorerResourceIsRoot",
+                    "command": "wad.mountWadFile",
+                    "group": "navigation"
+                },
+                {
+                    "when": "resourceLangId == wad && explorerResourceIsRoot",
+                    "command": "wad.unmountWadFile",
+                    "group": "navigation"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "when": "false",
+                    "command": "pk3fs.mountPk3File"
+                },
+                {
+                    "when": "false",
+                    "command": "pk3fs.unmountPk3File"
+                },
+                {
+                    "when": "false",
+                    "command": "wad.mountWadFile"
+                },
+                {
+                    "when": "false",
+                    "command": "wad.unmountWadFile"
+                },
+                {
+                    "when": "editorLangId == pk3",
+                    "command": "pk3fs.mountPk3Editor"
+                },
+                {
+                    "when": "editorLangId == wad",
+                    "command": "wad.mountWadEditor"
+                }
+            ]
         }
-
     },
     "author": {
         "name": "Micila \"Kaptain\" Micillotto",

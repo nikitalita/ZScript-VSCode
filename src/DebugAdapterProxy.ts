@@ -161,9 +161,14 @@ export interface DebugAdapterProxyOptions extends DebugConfiguration {
 
     /**
      * launcherProcess
-     * The executable that was launched
+     * The executable that was launched, if this was a 'launch' request
      */
     launcherProcess?: ChildProcess
+
+    /**
+     * The pid of the launched process
+     */
+    pid?: number
 }
 
 // these are the ones we care about, so we make them mandatory
@@ -354,6 +359,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
     protected debuggerLocale: DebuggerLocale;
     protected launcherProcess?: ChildProcess
     protected _onConnected: Emitter<void> = new Emitter<void>();
+    protected pid?: number;
     constructor(options: DebugAdapterProxyOptions) {
         this.launcherProcess = options.launcherProcess;
         // this.launcherProcess?.stderr?.on('data', (data) => {
@@ -381,6 +387,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
             columnsStartAt1: true,
             pathsAreURIs: false,
         };
+        this.pid = options.pid;
         const homepath = process.env.HOME;
         this.logDirectory = options.logdir || path.join(homepath!, '.DAPProxy');
         this.logFilePath = this.getLogFilePath(this.logDirectory);

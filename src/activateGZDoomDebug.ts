@@ -12,6 +12,8 @@ import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
 import { Pk3FSProvider } from './pk3-provider/Pk3FSProvider';
 import { activate as activatePk3Provider } from './pk3-provider/index';
 import { activate as activateWadProvider } from './wad-provider/index';
+import { windowManager } from "./WindowManager";
+
 const debugLauncherService = new DebugLauncherService();
 const workspaceFileAccessor = new WorkspaceFileAccessor();
 let wadFileSystemProvider: WadFileSystemProvider | null = null;
@@ -157,16 +159,8 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             let cancellationSource = new vscode.CancellationTokenSource();
             let cancellationToken = cancellationSource.token;
 
-            // let warningMessage = vscode.window.showWarningMessage(
-            //     `Make sure that gzdoom is running and is either in-game or at the main menu.`,
-            //     'Continue',
-            //     'Cancel'
-            // ).then(pickedOption => {
-            //     selectedGameRunningOption = pickedOption || 'Cancel';
-            // });
             let resolved = false;
-            let timedOut = false;
-            let windowPromise = cancellableWindow(
+            cancellableWindow(
                 `Make sure that gzdoom is running and is either in-game or at the main menu.`,
                 65000,
                 undefined,
@@ -235,6 +229,10 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
     }
 
 	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<vscode.DebugAdapterDescriptor> {
+        // macos requires accessibility permission for re-focusing the window after execution resumes
+        // no need to check for platform, windowManager.requestAccessibility() is a no-op on non-macos
+        windowManager.requestAccessibility();
+
         let options = _session.configuration as GZDoomDebugAdapterProxyOptions;
         if (!_session.configuration.projects) {
             if (!_session.workspaceFolder) {
@@ -266,6 +264,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 		let launched: DebugLaunchState = DebugLaunchState.success;
         let launchCommand: LaunchCommand | undefined = undefined;
         let reattach = false;
+        let pid = 0;
         try {
             if (options.request === 'attach' && this.previousCmd.has(_session.id)) {
                 reattach = true;
@@ -303,6 +302,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 			);
             launched = await debugLauncherService.runLauncher(launchCommand!, port, cancellationToken);
 			wait_message.dispose();
+            pid = debugLauncherService.launcherProcess?.pid || 0;
 		}
 		if (launched != DebugLaunchState.success) {
 			if (launched === DebugLaunchState.cancelled) {
@@ -319,6 +319,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
                 _session.configuration.noop = true;
                 return noopExecutable;
             } else if (options.request === 'attach') {
+                pid = debugLauncherService.getGamePIDs()[0];
                 let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
                 if (launchCommand) {
                     projects = await this.resolveProjects(projects, launchCommand);
@@ -329,6 +330,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
         options.projects = projects;
 		var config = options as GZDoomDebugAdapterProxyOptions;
 		config.launcherProcess = debugLauncherService.launcherProcess;
+        config.pid = pid;
 
 
         config.startNow = false;
