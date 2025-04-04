@@ -969,7 +969,9 @@
                             "name": "gzdoom Launch",
                             "request": "launch",
                             "gzdoomPath": "C:/Program Files/GZDoom/gzdoom.exe",
-                            "projectPath": "${workspaceFolder}",
+                            "projects": [
+                                "${workspaceFolder}"
+                            ],
                             "iwad": "doom2.wad",
                             "configPath": "",
                             "map": "",
@@ -985,7 +987,9 @@
                             "name": "gzdoom Attach",
                             "request": "attach",
                             "port": 19021,
-                            "projectPath": "${workspaceFolder}"
+                            "projects": [
+                                "${workspaceFolder}"
+                            ]
                         }
                     }
                 ]

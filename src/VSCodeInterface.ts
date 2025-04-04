@@ -21,21 +21,20 @@ export class VSCodeFileAccessor implements FileAccessor {
         let uri: vscode.Uri;
         try {
             uri = pathToUri(path);
+            return await vscode.workspace.fs.stat(uri).then(stat => stat.type === vscode.FileType.Directory);
         } catch (e) {
             return false;
         }
-
-        return await vscode.workspace.fs.stat(uri).then(stat => stat.type === vscode.FileType.Directory);
     }
 
     async isFile(path: string): Promise<boolean> {
         let uri: vscode.Uri;
         try {
             uri = pathToUri(path);
+            return await vscode.workspace.fs.stat(uri).then(stat => stat.type === vscode.FileType.File);
         } catch (e) {
             return false;
         }
-        return await vscode.workspace.fs.stat(uri).then(stat => stat.type === vscode.FileType.File);
     }
 
     async readDirectory(path: string): Promise<[string, vscode.FileType][]> {
