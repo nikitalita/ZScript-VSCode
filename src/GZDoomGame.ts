@@ -1,3 +1,4 @@
+import path from "path";
 
 export const DEFAULT_PORT = 19021;
 
@@ -31,9 +32,18 @@ export function normalizePath(path: string) {
     let parts = path.split('/');
     let result: string[] = [];
     for (let part of parts) {
+        if (!part) continue;
         if (part == '.') continue;
         if (part == '..') result.pop();
         else result.push(part);
     }
     return result.join('/');
+}
+
+export function startsWithDriveLetter(p: string) {
+    return /^[A-Za-z]:/.test(p);
+}
+
+export function PathIsAbsolute(p: string) {
+    return path.isAbsolute(p) || startsWithDriveLetter(p);
 }

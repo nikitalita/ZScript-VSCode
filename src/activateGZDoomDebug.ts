@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
 import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLauncherService';
-import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem } from './GZDoomGame';
+import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem, startsWithDriveLetter, PathIsAbsolute } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
@@ -74,15 +74,16 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 
             // if project.path or project.archive is not absolute, make it absolute
             if (workspaceFolder) {
-                if (!path.isAbsolute(project.path)) {
+                if (!PathIsAbsolute(project.path)) {
                     project.path = path.join(workspaceFolder, project.path);
                 }
-                if (!path.isAbsolute(project.archive) && !isBuiltinPK3File(project.archive)) {
+                if (!PathIsAbsolute(project.archive) && !isBuiltinPK3File(project.archive)) {
                     project.archive = path.join(workspaceFolder, project.archive);
                 }
             }
             project.archive = normalizePath(project.archive);
-            if (!project.archive.endsWith('/') && await workspaceFileAccessor.isDirectory(project.archive)) {
+            // if it says it's a directory or the extension is nothing
+            if (!project.archive.endsWith('/') && (await workspaceFileAccessor.isDirectory(project.archive) || path.extname(path.basename(project.archive)) === '')) {
                 project.archive += '/';
             }
             new_projects.push(project);
@@ -190,9 +191,7 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
     private previousCmd: Map<string, LaunchCommand> = new Map();
 
     async ensureGameRunning(port: number) {
-        if (!(await debugLauncherService.getGameIsRunning()) || !(await debugLauncherService.waitForPort(port, 1000))) {
-
-
+        if (!(await debugLauncherService.waitForPort(port, 1000))) {
             let cancellationSource = new vscode.CancellationTokenSource();
             let cancellationToken = cancellationSource.token;
 
@@ -229,6 +228,18 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             if (!await workspaceFileAccessor.isDirectory(project.archive) && !await workspaceFileAccessor.isFile(project.archive) && !isBuiltinPK3File(project.archive)) {
                 throw new Error(`Project archive '${project.archive}' could not be found.`);
             }
+        }
+    }
+
+    async WarnIfProjectsMissing(projects: ProjectItem[]) {
+        let missing_projects: string[] = [];
+        for (let project of projects) {
+            if (!await workspaceFileAccessor.isDirectory(project.archive) && !await workspaceFileAccessor.isFile(project.archive) && !isBuiltinPK3File(project.archive)) {
+                missing_projects.push(project.archive);
+            }
+        }
+        if (missing_projects.length > 0) {
+            cancellableWindow(`The following projects could not be found, you may experience errors when launching or debugging: ${missing_projects.join(', ')}.`, 7000);
         }
     }
 
@@ -272,9 +283,8 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             _session.configuration.noop = true;
             return noopExecutable;
         }
-        await this.resolveProjects(options.projects);
-
         if (options.request === 'launch' || reattach) {
+            await this.resolveProjects(options.projects);
 			const cancellationSource = new vscode.CancellationTokenSource();
 			const cancellationToken = cancellationSource.token;
 			const port = options.port || DEFAULT_PORT;
@@ -301,10 +311,13 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
                 _session.configuration.noop = true;
                 return noopExecutable;
             } else if (options.request === 'attach') {
-                pid = debugLauncherService.getGamePIDs()[0];
-                let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
-                if (launchCommand) {
-                    this.previousCmd.set(_session.id, launchCommand);
+                // await this.WarnIfProjectsMissing(options.projects);
+                if ((await debugLauncherService.getGameIsRunning())) {
+                    pid = debugLauncherService.getGamePIDs()[0];
+                    let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
+                    if (launchCommand) {
+                        this.previousCmd.set(_session.id, launchCommand);
+                    }
                 }
             }
         }
