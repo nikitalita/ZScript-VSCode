@@ -2,8 +2,8 @@ import { addon } from "..";
 import { IMonitorInfo, IRectangle } from "../interfaces";
 import { release } from "os";
 
-const getMonitorInfo = (id: number): IMonitorInfo => {
-  if (!addon || !addon.getMonitorInfo) return;
+const getMonitorInfo = (id: number): IMonitorInfo | null => {
+  if (!addon || !addon.getMonitorInfo) return null;
   return addon.getMonitorInfo(id);
 }
 
@@ -14,20 +14,20 @@ export class Monitor {
     this.id = id;
   }
 
-  getBounds(): IRectangle {
-    return getMonitorInfo(this.id).bounds;
+  getBounds(): IRectangle | null {
+    return getMonitorInfo(this.id)?.bounds ?? null;
   }
 
-  getWorkArea(): IRectangle {
-    return getMonitorInfo(this.id).workArea;
+  getWorkArea(): IRectangle | null {
+    return getMonitorInfo(this.id)?.workArea ?? null;
   }
 
-  isPrimary(): boolean {
-    return getMonitorInfo(this.id).isPrimary;
+  isPrimary(): boolean | null {
+    return getMonitorInfo(this.id)?.isPrimary ?? null;
   }
 
-  getScaleFactor(): number {
-    if (!addon || !addon.getMonitorScaleFactor) return;
+  getScaleFactor(): number | null {
+    if (!addon || !addon.getMonitorScaleFactor) return null;
 
     const numbers = release()
       .split(".")

@@ -23,7 +23,7 @@ function getOpts() {
             }
             let newPath = path.resolve(opts.module_root, "..");
             if (newPath === opts.module_root) {
-                throw new Error("Failed to find package.json")
+                return null
             }
             opts.module_root = newPath
         }
@@ -36,22 +36,37 @@ function require_addon() {
     try {
         let addon = bindings(opts)
         if (!addon) {
-            throw new Error("Failed to load addon")
+            // throw new Error("Failed to load addon")
+            return null
         }
         return addon
     } catch (e) {
         if (opts.dirname) {
-            const path = require("path")
-            let addonPath = path.join(opts.dirname, "addon.node")
-            let addon = require(addonPath)
-            return addon
+            try {
+                const path = require("path")
+                let addonPath = path.join(opts.dirname, "addon.node")
+                let addon = require(addonPath)
+                return addon
+            } catch (e) {
+                console.error(e)
+                return null
+            }
         }
         console.error(e)
-        throw e
+        return null
     }
 }
 
-const addon = require_addon()
+function get_addon() {
+    let addon = require_addon();
+    if (!addon) {
+        console.error("Failed to load addon, WindowManager will not be available!")
+        return null
+    }
+    return addon
+}
+
+const addon = get_addon()
 
 let interval: any = null
 
@@ -66,6 +81,7 @@ class WindowManager extends EventEmitter {
         if (!addon) return
 
         this.on("newListener", event => {
+            if (!addon || !addon.getActiveWindow) return true
             if (event === "window-activated") {
                 lastId = addon.getActiveWindow()
             }
