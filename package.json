@@ -40,7 +40,6 @@
         "glob": "^7.2.0",
         "mocha": "^9.2.2",
         "path-browserify": "^1.0.1",
-        "ps-list": "^6.3.0",
         "rimraf": "^3.0.2",
         "typescript": "^4.6.3",
         "url": "^0.11.0",

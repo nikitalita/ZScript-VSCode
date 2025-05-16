@@ -1,7 +1,6 @@
 import { CancellationToken, CancellationTokenSource, window } from 'vscode';
 import { ChildProcess, spawn } from 'node:child_process';
 import waitPort from 'wait-port';
-import procList from 'ps-list';
 import findProcess from 'find-process';
 import { lsof, ProcessInfo } from 'list-open-files';
 
@@ -44,12 +43,12 @@ export class DebugLauncherService implements IDebugLauncherService {
     }
 
     async getGameIsRunning() {
-        const processList = await procList();
+        const processList = await findProcess('name', GAME_NAME, false);
         return processList.some((p) => p.name.toLowerCase() === GAME_NAME);
     }
 
     async getGamePIDs(): Promise<Array<number>> {
-        const processList = await procList();
+        const processList = await findProcess('name', GAME_NAME, false);
 
         const gameProcesses = processList.filter(
             (p) => p.name.toLowerCase() === GAME_NAME
@@ -63,10 +62,10 @@ export class DebugLauncherService implements IDebugLauncherService {
     }
 
     async getLaunchCommandFromRunningProcess(port: number): Promise<LaunchCommand | undefined> {
-        let process = await findProcess('port', port);
+        let process = await findProcess('port', port, false);
         if (process.length === 0) {
             // just look for "gzdoom"
-            process = await findProcess('name', GAME_NAME);
+            process = await findProcess('name', GAME_NAME, false);
             if (process.length === 0) {
                 return undefined;
             } else if (process.length > 1) {
