@@ -1,0 +1,73 @@
+name: Build and Package Extension
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      vsix_path: ${{ steps.find-vsix.outputs.path }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+      shell: pwsh
+
+    - name: Build extension
+      run: npm run build
+      shell: pwsh
+
+    - name: Package extension
+      run: npm run package
+      shell: pwsh
+
+    - name: List artifacts
+      run: dir *.vsix
+      shell: pwsh
+
+    - name: Find VSIX file
+      id: find-vsix
+      shell: pwsh
+      run: |
+        $vsix = Get-ChildItem -Filter "gzdoom-zscript-*.vsix" | Select-Object -First 1
+        echo "path=$($vsix.FullName)" >> $env:GITHUB_OUTPUT
+
+    - name: Upload VSIX
+      uses: actions/upload-artifact@v4
+      with:
+        name: gzdoom-zscript
+        path: gzdoom-zscript-*.vsix
+        if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - name: Download VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: gzdoom-zscript
+          path: .
+
+      - name: Release
+        uses: nikitalita/action-gh-release@v1.0
+        with:
+          files: gzdoom-zscript-*.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
