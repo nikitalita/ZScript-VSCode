@@ -156,7 +156,9 @@
                 ],
                 "filenames": [
                     "DECORATE",
-                    "decorate"
+                    "decorate",
+                    "DECORATE.txt",
+                    "decorate.txt"
                 ],
                 "configuration": "./configurations/DecorateConfiguration.json"
             },
@@ -183,7 +185,11 @@
                     "MAPINFO",
                     "mapinfo",
                     "ZMAPINFO",
-                    "zmapinfo"
+                    "zmapinfo",
+                    "MAPINFO.txt",
+                    "mapinfo.txt",
+                    "ZMAPINFO.txt",
+                    "zmapinfo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -198,7 +204,9 @@
                 ],
                 "filenames": [
                     "LOCKDEFS",
-                    "lockdefs"
+                    "lockdefs",
+                    "LOCKDEFS.txt",
+                    "lockdefs.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -213,7 +221,9 @@
                 ],
                 "filenames": [
                     "DECALDEF",
-                    "decaldef"
+                    "decaldef",
+                    "DECALDEF.txt",
+                    "decaldef.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -228,7 +238,9 @@
                 ],
                 "filenames": [
                     "MENUDEF",
-                    "menudef"
+                    "menudef",
+                    "MENUDEF.txt",
+                    "menudef.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -243,7 +255,9 @@
                 ],
                 "filenames": [
                     "ALTHUD",
-                    "althud"
+                    "althud",
+                    "ALTHUD.txt",
+                    "althud.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -258,7 +272,9 @@
                 ],
                 "filenames": [
                     "DEFBINDS",
-                    "defbinds"
+                    "defbinds",
+                    "DEFBINDS.txt",
+                    "defbinds.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -273,7 +289,9 @@
                 ],
                 "filenames": [
                     "ANIMDEFS",
-                    "animdefs"
+                    "animdefs",
+                    "ANIMDEFS.txt",
+                    "animdefs.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -288,7 +306,9 @@
                 ],
                 "filenames": [
                     "CVARINFO",
-                    "cvarinfo"
+                    "CVARINFO.txt",
+                    "cvarinfo",
+                    "cvarinfo.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -303,7 +323,9 @@
                 ],
                 "filenames": [
                     "DEFCVARS",
-                    "defcvars"
+                    "defcvars",
+                    "DEFCVARS.txt",
+                    "defcvars.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -319,7 +341,9 @@
                 ],
                 "filenames": [
                     "DEHACKED",
-                    "dehacked"
+                    "DEHACKED.txt",
+                    "dehacked",
+                    "dehacked.txt"
                 ],
                 "configuration": "./configurations/DehackedConfiguration.json"
             },
@@ -334,7 +358,9 @@
                 ],
                 "filenames": [
                     "DMXGUS",
-                    "dmxgus"
+                    "dmxgus",
+                    "DMXGUS.txt",
+                    "dmxgus.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -349,7 +375,9 @@
                 ],
                 "filenames": [
                     "FONTDEFS",
-                    "fontdefs"
+                    "fontdefs",
+                    "FONTDEFS.txt",
+                    "fontdefs.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -364,7 +392,9 @@
                 ],
                 "filenames": [
                     "GAMEINFO",
-                    "gameinfo"
+                    "gameinfo",
+                    "GAMEINFO.txt",
+                    "gameinfo.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -379,7 +409,9 @@
                 ],
                 "filenames": [
                     "GLDEFS",
-                    "gldefs"
+                    "gldefs",
+                    "GLDEFS.txt",
+                    "gldefs.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -394,7 +426,9 @@
                 ],
                 "filenames": [
                     "IWADINFO",
-                    "iwadinfo"
+                    "iwadinfo",
+                    "IWADINFO.txt",
+                    "iwadinfo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -409,7 +443,9 @@
                 ],
                 "filenames": [
                     "KEYCONF",
-                    "keyconf"
+                    "keyconf",
+                    "KEYCONF.txt",
+                    "keyconf.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -424,7 +460,9 @@
                 ],
                 "filenames": [
                     "LANGUAGE",
-                    "language"
+                    "language",
+                    "LANGUAGE.txt",
+                    "language.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -439,7 +477,9 @@
                 ],
                 "filenames": [
                     "MODELDEF",
-                    "modeldef"
+                    "modeldef",
+                    "MODELDEF.txt",
+                    "modeldef.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -454,7 +494,9 @@
                 ],
                 "filenames": [
                     "MUSINFO",
-                    "musinfo"
+                    "musinfo",
+                    "MUSINFO.txt",
+                    "musinfo.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -469,7 +511,9 @@
                 ],
                 "filenames": [
                     "PALVERS",
-                    "palvers"
+                    "palvers",
+                    "PALVERS.txt",
+                    "palvers.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -484,7 +528,9 @@
                 ],
                 "filenames": [
                     "REVERBS",
-                    "reverbs"
+                    "reverbs",
+                    "REVERBS.txt",
+                    "reverbs.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -499,7 +545,9 @@
                 ],
                 "filenames": [
                     "S_SKIN",
-                    "s_skin"
+                    "s_skin",
+                    "S_SKIN.txt",
+                    "s_skin.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -514,7 +562,9 @@
                 ],
                 "filenames": [
                     "XHAIRS",
-                    "xhairs"
+                    "xhairs",
+                    "XHAIRS.txt",
+                    "xhairs.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -529,7 +579,9 @@
                 ],
                 "filenames": [
                     "X11R6RGB",
-                    "x11r6rgb"
+                    "x11r6rgb",
+                    "X11R6RGB.txt",
+                    "x11r6rgb.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -544,7 +596,9 @@
                 ],
                 "filenames": [
                     "TRNSLATE",
-                    "trnslate"
+                    "trnslate",
+                    "TRNSLATE.txt",
+                    "trnslate.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -559,7 +613,9 @@
                 ],
                 "filenames": [
                     "VOXELDEF",
-                    "voxeldef"
+                    "voxeldef",
+                    "VOXELDEF.txt",
+                    "voxeldef.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -574,7 +630,9 @@
                 ],
                 "filenames": [
                     "TEXTCOLO",
-                    "textcolo"
+                    "textcolo",
+                    "TEXTCOLO.txt",
+                    "textcolo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -589,7 +647,9 @@
                 ],
                 "filenames": [
                     "TEAMINFO",
-                    "teaminfo"
+                    "teaminfo",
+                    "TEAMINFO.txt",
+                    "teaminfo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -604,7 +664,9 @@
                 ],
                 "filenames": [
                     "TERRAIN",
-                    "terrain"
+                    "terrain",
+                    "TERRAIN.txt",
+                    "terrain.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -619,7 +681,9 @@
                 ],
                 "filenames": [
                     "SECRETS",
-                    "secrets"
+                    "secrets",
+                    "SECRETS.txt",
+                    "secrets.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             },
@@ -634,7 +698,9 @@
                 ],
                 "filenames": [
                     "SBARINFO",
-                    "sbarinfo"
+                    "sbarinfo",
+                    "SBARINFO.txt",
+                    "sbarinfo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -649,7 +715,9 @@
                 ],
                 "filenames": [
                     "SNDINFO",
-                    "sndinfo"
+                    "sndinfo",
+                    "SNDINFO.txt",
+                    "sndinfo.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -664,7 +732,9 @@
                 ],
                 "filenames": [
                     "TEXTURES",
-                    "textures"
+                    "textures",
+                    "TEXTURES.txt",
+                    "textures.txt"
                 ],
                 "configuration": "./configurations/MAPINFOLikeConfiguration.json"
             },
@@ -679,7 +749,9 @@
                 ],
                 "filenames": [
                     "SNDSEQ",
-                    "sndseq"
+                    "sndseq",
+                    "SNDSEQ.txt",
+                    "sndseq.txt"
                 ],
                 "configuration": "./configurations/basicLanguageConfiguration.json"
             }
