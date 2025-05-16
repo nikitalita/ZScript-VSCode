@@ -3,6 +3,7 @@ import { ChildProcess, spawn } from 'node:child_process';
 import waitPort from 'wait-port';
 import findProcess from 'find-process';
 import { lsof, ProcessInfo } from 'list-open-files';
+import path from 'path';
 
 export enum DebugLaunchState {
     success,
@@ -19,7 +20,7 @@ export interface IDebugLauncherService {
         portToCheck: number,
         cancellationToken?: CancellationToken
     ): Promise<DebugLaunchState>;
-    getLaunchCommandFromRunningProcess(port: number): Promise<LaunchCommand | undefined>;
+    getLaunchCommandFromRunningProcess(port: number, game_name: string): Promise<LaunchCommand | undefined>;
 }
 
 export interface LaunchCommand {
@@ -35,6 +36,8 @@ export class DebugLauncherService implements IDebugLauncherService {
     public launcherProcess: ChildProcess | undefined;
     private gamePID: number | undefined;
     private tearingDown = false;
+    private gameName: string = GAME_NAME;
+    private errorString: string = '';
     constructor() {
     }
     private reset() {
@@ -42,16 +45,22 @@ export class DebugLauncherService implements IDebugLauncherService {
         this.gamePID = undefined;
     }
 
-    async getGameIsRunning() {
-        const processList = await findProcess('name', GAME_NAME, false);
-        return processList.some((p) => p.name.toLowerCase() === GAME_NAME);
+    async getGameIsRunning(game_name: string = this.gameName) {
+        if (game_name.endsWith('.exe')) {
+            game_name = game_name.slice(0, -4);
+        }
+        const processList = await findProcess('name', game_name, false);
+        return processList.some((p) => p.name.toLowerCase() === game_name);
     }
 
-    async getGamePIDs(): Promise<Array<number>> {
-        const processList = await findProcess('name', GAME_NAME, false);
+    async getGamePIDs(game_name: string = this.gameName): Promise<Array<number>> {
+        if (game_name.endsWith('.exe')) {
+            game_name = game_name.slice(0, -4);
+        }
+        const processList = await findProcess('name', game_name, false);
 
         const gameProcesses = processList.filter(
-            (p) => p.name.toLowerCase() === GAME_NAME
+            (p) => p.name.toLowerCase() === game_name
         );
 
         if (gameProcesses.length === 0) {
@@ -61,15 +70,18 @@ export class DebugLauncherService implements IDebugLauncherService {
         return gameProcesses.map((p) => p.pid);
     }
 
-    async getLaunchCommandFromRunningProcess(port: number): Promise<LaunchCommand | undefined> {
+    async getLaunchCommandFromRunningProcess(port: number, game_name: string = this.gameName): Promise<LaunchCommand | undefined> {
+        if (game_name.endsWith('.exe')) {
+            game_name = game_name.slice(0, -4);
+        }
         let process = await findProcess('port', port, false);
         if (process.length === 0) {
             // just look for "gzdoom"
-            process = await findProcess('name', GAME_NAME, false);
+            process = await findProcess('name', game_name, false);
             if (process.length === 0) {
                 return undefined;
             } else if (process.length > 1) {
-                console.error(`Found multiple gzdoom processes running on port ${port}`);
+                console.error(`Found multiple ${game_name} processes running on port ${port}`);
             }
         }
         let argv: string[] = []
@@ -109,10 +121,18 @@ export class DebugLauncherService implements IDebugLauncherService {
         return launchCommand;
     }
 
+    async removeProcessListeners() {
+        if (this.launcherProcess) {
+            this.launcherProcess.removeAllListeners();
+            this.launcherProcess.stdout?.removeAllListeners();
+            this.launcherProcess.stderr?.removeAllListeners();
+        }
+    }
+
     async tearDownAfterDebug() {
         // If MO2 was already opened by the user before launch, the process would have detached and this will be closed anyway
         if (this.launcherProcess) {
-            this.launcherProcess.removeAllListeners();
+            this.removeProcessListeners();
             try {
                 if (this.launcherProcess.kill()) {
                     this.reset();
@@ -172,15 +192,20 @@ export class DebugLauncherService implements IDebugLauncherService {
         return !this.launcherProcess || (this.launcherProcess.exitCode !== null && this.launcherProcess.exitCode !== 0)
     }
 
+
+
+
     /**
      *
      * @param port
      * @param connectionTimeout
      * @param intervalCallback called every 1000ms if we've failed to open the port, but haven't timed out yet; returns true if we should keep waiting
+     * @param interval the interval to wait between checks
      * @returns true if the port was opened, false if we timed out
      */
-    async waitForPort(port: number, connectionTimeout: number = 15000, intervalCallback: () => boolean = () => true) {
+    async waitForPort(port: number, connectionTimeout: number = 15000, intervalCallback: () => boolean | Promise<boolean> = () => true, interval: number = 1000) {
         let result = false;
+        const isPromise = intervalCallback instanceof Promise;
         const startTime: number = new Date().getTime();
         while (true) {
             const currentTime = new Date().getTime();
@@ -192,18 +217,45 @@ export class DebugLauncherService implements IDebugLauncherService {
                     await waitPort({
                         host: 'localhost',
                         port: port,
-                        timeout: Math.min(1000, connectionTimeout),
-                        interval: Math.min(1000, connectionTimeout),
+                        timeout: Math.min(interval, connectionTimeout),
+                        interval: Math.min(interval, connectionTimeout),
                         output: 'silent',
                     })
                 ).open;
-                if (result || !intervalCallback()) {
+                if (result || !(await intervalCallback())) {
                     break;
                 }
             }
         }
         return result;
     }
+
+    /**
+     *
+     * @param connectionTimeout
+     * @param intervalCallback called every 1000ms if we've failed to open the port, but haven't timed out yet; returns true if we should keep waiting
+     * @param interval the interval to wait between checks
+     * @returns true if the port was opened, false if we timed out
+     */
+    async waitForGameToStart(connectionTimeout: number = 15000, intervalCallback: () => boolean | Promise<boolean> = () => true) {
+        let result = false;
+        const isPromise = intervalCallback instanceof Promise;
+        const startTime: number = new Date().getTime();
+        while (true) {
+            const currentTime = new Date().getTime();
+            const timedOut = currentTime > startTime + connectionTimeout;
+            if (timedOut) {
+                return false;
+            } else {
+                result = await this.getGameIsRunning(this.gameName);
+                if (result || !(await intervalCallback())) {
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
 
     public getLaunchCommand(
         gzdoomPath: string,
@@ -252,70 +304,95 @@ export class DebugLauncherService implements IDebugLauncherService {
             cancellationToken = this.cancellationTokenSource.token;
         }
         const cmd = launcherCommand.command;
+        // get the file name from the command
+        this.gameName = path.basename(cmd);
+        if (this.gameName.endsWith('.exe')) {
+            this.gameName = this.gameName.slice(0, -4);
+        }
         const args = launcherCommand.args;
         const port = portToCheck;
+        let _output: string = '';
         let _stdOut: string = '';
         let _stdErr: string = '';
         this.launcherProcess = spawn(cmd, args, {
             cwd: launcherCommand.cwd,
         });
+        let gameIsRunning = true;
+        let errorOccured = false;
+        let exitCode: number | null = null;
+        this.launcherProcess.on('close', (code) => {
+            gameIsRunning = false;
+            errorOccured = true;
+            exitCode = code;
+        });
+        this.launcherProcess.on('error', (error) => {
+            console.error(error);
+            _stdErr += error.toString();
+            _output += error.toString();
+            this.errorString = error.toString();
+            gameIsRunning = false;
+            errorOccured = true;
+        });
         this.launcherProcess.stdout?.on('data', (data) => {
-            console.log(data.toString());
+            let dataString = data.toString();
+            console.log(dataString);
+            _stdOut += dataString;
+            _output += dataString;
         });
         this.launcherProcess.stderr?.on('data', (data) => {
-            console.error(data.toString());
+            let dataString = data.toString();
+            console.error(dataString);
+            _stdErr += dataString;
+            _output += dataString;
         });
-        if (!this.launcherProcess || !this.launcherProcess.stdout || !this.launcherProcess.stderr) {
-            window.showErrorMessage(`Failed to start launcher process.\ncmd: ${cmd}\nargs: ${args.join(' ')}`);
-            return DebugLaunchState.launcherError;
+
+        const _processHasExited = () => {
+            if (errorOccured || !this.launcherProcess || !this.launcherProcess.stdout || !this.launcherProcess.stderr) {
+                return true;
+            }
+            return false;
+        };
+        const _checkBad = () => {
+            if (_processHasExited()) {
+                return true;
+            }
+            if (cancellationToken.isCancellationRequested) {
+                return true;
+            }
+            return false;
+        };
+        const _handleBad = async () => {
+            this.removeProcessListeners();
+            if (_processHasExited()) {
+                window.showErrorMessage(
+                    `Launcher process exited with error code ${this.launcherProcess?.exitCode || exitCode || -1
+                    }.\ncmd: ${cmd}\nargs: ${args.join(' ')}\noutput: ${_output}`
+                );
+                return DebugLaunchState.launcherError;
+            }
+            if (cancellationToken.isCancellationRequested) {
+                await this.tearDownAfterDebug();
+                return DebugLaunchState.cancelled;
+            }
+            return DebugLaunchState.gameFailedToStart;
+        };
+        if (_checkBad()) {
+            return await _handleBad();
         }
-        this.launcherProcess.stdout.on('data', (data) => {
-            _stdOut += data;
-        });
-        this.launcherProcess.stderr.on('data', (data) => {
-            _stdErr += data;
-        });
-        const _handleProcessExit = () => {
-            return (
-                !this.launcherProcess || (this.launcherProcess.exitCode !== null && this.launcherProcess.exitCode !== 0)
-            );
-        };
-        const _showErrorCode = () => {
-            window.showErrorMessage(
-                `Launcher process exited with error code ${this.launcherProcess?.exitCode || -1
-                }.\ncmd: ${cmd}\nargs: ${args.join(' ')}\nstderr: ${_stdErr}\nstdout: ${_stdOut}`
-            );
-        };
         const GameStartTimeout = 15000;
         // get the current system time
-        let startTime = new Date().getTime();
-        // wait for the games process to start
-        while (!cancellationToken.isCancellationRequested) {
-            const gameIsRunning = await this.getGameIsRunning();
-            const timedOut = !(await this.keepSleepingUntil(startTime, GameStartTimeout));
-            if (!gameIsRunning && !timedOut) {
-                // check if the launcher process failed to launch, or exited and returned an error
-                if (_handleProcessExit()) {
-                    _showErrorCode();
-                    return DebugLaunchState.launcherError;
-                }
-            } else {
-                break;
-            }
-        }
-
-        if (cancellationToken.isCancellationRequested) {
-            await this.tearDownAfterDebug();
-            return DebugLaunchState.cancelled;
+        gameIsRunning = await this.waitForGameToStart(GameStartTimeout, () => {
+            return !_checkBad();
+        });
+        if (!gameIsRunning || _checkBad()) {
+            return await _handleBad();
         }
         // we can't get the PID of the game from the launcher process because
         // both MO2 and the script extender loaders fork and deatch the game process
         const gamePIDs = await this.getGamePIDs();
-
         if (gamePIDs.length === 0) {
-            return DebugLaunchState.gameFailedToStart;
+            return await _handleBad();
         }
-
         if (gamePIDs.length > 1) {
             return DebugLaunchState.multipleGamesRunning;
         }
@@ -323,37 +400,16 @@ export class DebugLauncherService implements IDebugLauncherService {
 
         // game has launched, now we wait for the port to open
         const connectionTimeout = 15000;
-        startTime = new Date().getTime();
-        // TODO: Remember to check for starfield only when we remove the skyrim/fallout 4 proxy
         let result = false;
-        while (!cancellationToken.isCancellationRequested) {
-            const gameIsRunning = await this.getGameIsRunning();
-            const currentTime = new Date().getTime();
-            const timedOut = currentTime > startTime + connectionTimeout;
-            if (timedOut) {
-                window.showErrorMessage(`Debugger failed to connect.`);
-                return DebugLaunchState.gameFailedToStart;
-            } else if (!gameIsRunning) {
-                if (_handleProcessExit()) {
-                    _showErrorCode();
-                    return DebugLaunchState.launcherError;
-                }
-                return DebugLaunchState.gameFailedToStart;
-            } else {
-                // DAP server is interpreting the port probing as a connection, disabling for now
-                result = (
-                    await waitPort({
-                        host: 'localhost',
-                        port: port,
-                        timeout: 1000,
-                        interval: 1000,
-                        output: 'silent',
-                    })
-                ).open;
-                if (result) {
-                    break;
-                }
+        result = await this.waitForPort(port, connectionTimeout, async () => {
+            if (cancellationToken.isCancellationRequested) {
+                return false;
             }
+            gameIsRunning = await this.getGameIsRunning();
+            return gameIsRunning;
+        });
+        if (!gameIsRunning || _checkBad()) {
+            return await _handleBad();
         }
         return result ? DebugLaunchState.success : DebugLaunchState.gameFailedToStart;
     }
