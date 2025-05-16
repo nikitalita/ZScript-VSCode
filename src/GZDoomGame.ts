@@ -31,13 +31,14 @@ export function normalizePath(path: string) {
     path = path.replace(/\\/g, '/');
     let parts = path.split('/');
     let result: string[] = [];
+    let root = path.startsWith("/") ? "/" : "";
     for (let part of parts) {
         if (!part) continue;
         if (part == '.') continue;
         if (part == '..') result.pop();
         else result.push(part);
     }
-    return result.join('/');
+    return root + result.join('/');
 }
 
 export function startsWithDriveLetter(p: string) {
