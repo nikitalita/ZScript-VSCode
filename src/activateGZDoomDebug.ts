@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
 import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLauncherService';
-import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem, startsWithDriveLetter, PathIsAbsolute } from './GZDoomGame';
+import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem, startsWithDriveLetter, GAME_NAME, PathIsAbsolute } from './GZDoomGame';
 import path from 'path';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
@@ -283,7 +283,8 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             _session.configuration.noop = true;
             return noopExecutable;
         }
-        if (options.request === 'launch' || reattach) {
+        let shouldLaunch = options.request === 'launch' || reattach;
+        if (shouldLaunch) {
             await this.resolveProjects(options.projects);
 			const cancellationSource = new vscode.CancellationTokenSource();
 			const cancellationToken = cancellationSource.token;

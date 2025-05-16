@@ -7,7 +7,7 @@ export interface ProjectItem {
     path: string;
     archive: string;
 }
-
+export const GAME_NAME = "gzdoom";
 export const WAD_EXTENSIONS = ['wad', 'zip', 'pk3', 'pk7', 'deh', 'bex', "iwad", "pwad", "ipk3", "ipk7"];
 
 export const BUILTIN_PK3_FILES = [

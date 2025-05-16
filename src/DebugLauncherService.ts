@@ -4,6 +4,7 @@ import waitPort from 'wait-port';
 import findProcess from 'find-process';
 import { lsof, ProcessInfo } from 'list-open-files';
 import path from 'path';
+import { GAME_NAME } from './GZDoomGame';
 
 export enum DebugLaunchState {
     success,
@@ -28,21 +29,21 @@ export interface LaunchCommand {
     args: string[];
     cwd?: string;
 }
-const GAME_NAME = 'gzdoom';
 export class DebugLauncherService implements IDebugLauncherService {
 
     // TODO: Move this stuff into the global Context
     private cancellationTokenSource: CancellationTokenSource | undefined;
     public launcherProcess: ChildProcess | undefined;
     private gamePID: number | undefined;
-    private tearingDown = false;
     private gameName: string = GAME_NAME;
     private errorString: string = '';
     constructor() {
     }
-    private reset() {
+    public reset() {
         this.launcherProcess = undefined;
         this.gamePID = undefined;
+        this.gameName = GAME_NAME;
+        this.errorString = '';
     }
 
     async getGameIsRunning(game_name: string = this.gameName) {
@@ -130,7 +131,6 @@ export class DebugLauncherService implements IDebugLauncherService {
     }
 
     async tearDownAfterDebug() {
-        // If MO2 was already opened by the user before launch, the process would have detached and this will be closed anyway
         if (this.launcherProcess) {
             this.removeProcessListeners();
             try {
