@@ -47,22 +47,21 @@ export class DebugLauncherService implements IDebugLauncherService {
     }
 
     async getGameIsRunning(game_name: string = this.gameName) {
+        // check if we're on windows
+        
         if (game_name.endsWith('.exe')) {
             game_name = game_name.slice(0, -4);
         }
+        
         const processList = await findProcess('name', game_name, false);
-        return processList.some((p) => p.name.toLowerCase() === game_name);
+        return processList.length > 0;
     }
 
     async getGamePIDs(game_name: string = this.gameName): Promise<Array<number>> {
         if (game_name.endsWith('.exe')) {
             game_name = game_name.slice(0, -4);
         }
-        const processList = await findProcess('name', game_name, false);
-
-        const gameProcesses = processList.filter(
-            (p) => p.name.toLowerCase() === game_name
-        );
+        const gameProcesses = await findProcess('name', game_name, false);
 
         if (gameProcesses.length === 0) {
             return [];
