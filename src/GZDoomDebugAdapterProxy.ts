@@ -783,6 +783,8 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         if (projectItem) {
             Source.path = path.isAbsolute(Source.path) ? path.relative(projectItem.path, Source.path) : Source.path;
             Source.origin = projectItem.archive;
+        } else if (Source.origin) {
+            Source.origin = path.normalize(Source.origin);
         }
         return Source;
     }
