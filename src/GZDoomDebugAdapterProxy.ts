@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-prototype-builtins */
 import { DebugProtocol as DAP, } from '@vscode/debugprotocol';
-import * as path from 'path';
+import { gzpath as path } from './GZDoomGame';
 import { DAPLogLevel, DebugAdapterProxy, DebugAdapterProxyOptions } from './DebugAdapterProxy';
 import { Response, Message } from '@vscode/debugadapter/lib/messages';
 import * as chalk_d from 'chalk';
@@ -328,7 +328,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         this.clientCaps.adapterID = 'gzdoom';
         this.logClientToProxy = 'info';
         this.logProxyToServer = 'trace';
-        this.logServerToProxyReal = this.logServerToProxy;
+        this.logServerToProxyReal = 'info';
         this.logServerToProxy = 'silent'; // we take care of this ourselves
         this.logProxyToClient = 'trace';
     }
@@ -526,10 +526,11 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         const dehacked = await this.workspaceFileAccessor.findFiles('**/DEHACKED', '**/node_modules/**', 100000, true, roots);
         const combined = thing.concat(decorates).concat(acs).concat(dehacked);
         let items = combined.map((x) => {
+            const srcPath = path.normalize(x);
             // find the project directory this starts with
-            const projectItem = this.getProjectBySrcPath(x);
-            const item = { path: x, origin: projectItem } as SourceItem;
-            return [x, item] as [string, SourceItem];
+            const projectItem = this.getProjectBySrcPath(srcPath);
+            const item = { path: srcPath, origin: projectItem } as SourceItem;
+            return [srcPath, item] as [string, SourceItem];
         });
         this.sourcePaths = new ICaseMap<SourceItem>(items);
         this.done_scanning_project = true;
@@ -546,7 +547,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
     }
     private handleLaunchOrAttach(request: DAP.Request): void {
         if (!this.done_scanning_project) {
-            this.onFinishedScanning.event(() => {
+            this.onFinishedScanning.once(() => {
                 this.handleLaunchOrAttach(request);
             });
             return;
@@ -562,7 +563,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
             });
         });
         // vscode apparently doesn't do anything with the 'modulesRequest', so we have to send it ourselves
-        this.onSentLaunchRequest.event(() => {
+        this.onSentLaunchRequest.once(() => {
             const modulesRequest = <DAP.ModulesRequest>new Message('request');
             modulesRequest.command = 'modules';
             modulesRequest.arguments = {};
@@ -585,7 +586,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
                 this.handleAttachRequest(<DAP.AttachRequest>request);
             } else {
                 if (request.command != 'initialize' && !this.launch_request_sent) {
-                    this.onSentLaunchRequest.event(() => {
+                    this.onSentLaunchRequest.once(() => {
                         this.handleClientRequest(request);
                     });
                     return;
@@ -775,7 +776,7 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         if (!Source.path) {
             return Source;
         }
-        Source.path = this.convertClientPathToDebugger(Source.path);
+        Source.path = path.normalize(this.convertClientPathToDebugger(Source.path));
         const projectItem = this.getProjectBySrcPath(Source.path);
 
         // if it matches any of the project paths, make it relative to that project path
@@ -799,12 +800,12 @@ export class GZDoomDebugAdapterProxy extends DebugAdapterProxy {
         const sourceItem = this.sourcePaths.get(new_path);
         if (!sourceItem) {
             let npath = this.convertDebuggerPathToClient(Source.path);
-            Source.path = (Source?.origin) ? path.join(Source.origin, npath) : npath;
+            Source.path = path.client.normalize((Source?.origin) ? path.client.join(Source.origin, npath) : npath);
             return Source;
         }
-        Source.path = this.convertDebuggerPathToClient(sourceItem.path);
+        Source.path = path.client.normalize(this.convertDebuggerPathToClient(sourceItem.path));
         Source.name = path.basename(sourceItem.path);
-        Source.origin = sourceItem.origin.archive;
+        Source.origin = path.client.normalize(sourceItem.origin.archive);
         Source.sourceReference = 0;
         return Source;
     }

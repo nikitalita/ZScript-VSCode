@@ -1,4 +1,4 @@
-import path from "path";
+import path, { FormatInputPathObject } from "path";
 
 export const DEFAULT_PORT = 19021;
 
@@ -26,12 +26,19 @@ export function isWad(path: string) {
     return WAD_EXTENSIONS.some(ext => path.endsWith(ext));
 }
 
-export function normalizePath(path: string) {
+export function PathIsAbsolute(p: string) {
+    return path.isAbsolute(p) || startsWithDriveLetter(p);
+}
+
+export function normalizePath(p: string) {
     // basically like path.normalize but always converts \\ to /
-    path = path.replace(/\\/g, '/');
-    let parts = path.split('/');
+    p = p.replace(/\\/g, '/');
+    if (!PathIsAbsolute(p)) {
+        return p;
+    }
+    let parts = p.split('/');
     let result: string[] = [];
-    let root = path.startsWith("/") ? "/" : "";
+    let root = p.startsWith("/") ? "/" : "";
     for (let part of parts) {
         if (!part) continue;
         if (part == '.') continue;
@@ -45,6 +52,63 @@ export function startsWithDriveLetter(p: string) {
     return /^[A-Za-z]:/.test(p);
 }
 
-export function PathIsAbsolute(p: string) {
-    return path.isAbsolute(p) || startsWithDriveLetter(p);
+
+class gzpath_wrapper implements path.PlatformPath {
+        /**
+     * Normalize a string path, reducing '..' and '.' parts.
+     * When multiple slashes are found, they're replaced by a single one; when the path contains a trailing slash, it is preserved. On Windows, WE STILL USE SLASHES!!!!!!!!
+     *
+     * @param path string path to normalize.
+     * @throws {TypeError} if `path` is not a string.
+     */
+    normalize(p: string) {
+        return normalizePath(p);
+    }
+    isAbsolute(p: string) {
+        return PathIsAbsolute(p);
+    }
+    isRelative(p: string) {
+        return !PathIsAbsolute(p);
+    }
+    join(...paths: string[]) {
+        return normalizePath(path.join(...paths));
+    }
+    resolve(...paths: string[]) {
+        return normalizePath(path.resolve(...paths));
+    }
+    relative(base: string, p: string) {
+        return normalizePath(path.relative(base, p));
+    }
+    dirname(p: string) {
+        return path.dirname(p);
+    }
+    basename(p: string) {
+        return path.basename(p);
+    }
+    extname(p: string) {
+        return path.extname(p);
+    }
+    sep: '/' | '\\' = '/';
+    delimiter: ';' | ':' = path.delimiter;
+    parse(p: string) {
+        return path.parse(p);
+    }
+    format(p: FormatInputPathObject) {
+        return path.format(p);
+    }
+    toNamespacedPath(p: string) {
+        return path.toNamespacedPath(p);
+    }
+    get posix() {
+        return this;
+    }
+    get win32() {
+        return this;
+    }
+    // when we need to return paths to the client
+    get client() {
+        return path;
+    }
 }
+const gzpath = new gzpath_wrapper();
+export { gzpath };

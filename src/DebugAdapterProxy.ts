@@ -836,7 +836,7 @@ export abstract class DebugAdapterProxy implements VSCodeDebugAdapter {
                 this.stop();
                 return;
             }
-            this._onConnected.event(() => {
+            this._onConnected.once(() => {
                 if (!this.handleMessageFromClient) {
                     throw new Error('handleMessageFromClient is undefined');
                 }

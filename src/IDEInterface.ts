@@ -169,6 +169,8 @@ export class Emitter<T> implements EventEmitter<T> {
     private _events: Event0<T>[] = [];
     private _listeners: ((e: T) => void)[] = [];
     private _thises: any[] = [];
+    private _once_listeners: ((e: T) => void)[] = [];
+    private _once_thises: any[] = [];
 
     get event(): Event0<T> {
         const new_event = (listener: (e: T) => any, thisArg?: any) => {
@@ -192,24 +194,59 @@ export class Emitter<T> implements EventEmitter<T> {
 
         return new_event;
     }
+    
+    get once(): Event0<T> {
+        const new_event = (listener: (e: T) => any, thisArg?: any) => {
+            this._once_listeners.push(listener);
+            if (thisArg !== undefined) {
+                this._once_thises.push(thisArg);
+            }
+
+            const result: IDisposable = {
+                dispose: () => {
+                    // this._listener = undefined;
+                    this._once_listeners = this._once_listeners.filter(l => l !== listener);
+                    if (thisArg !== undefined) {
+                        this._once_thises = this._once_thises.filter(t => t !== thisArg);
+                    }
+                },
+            };
+            return result;
+        };
+        this._events.push(new_event);
+
+        return new_event;
+    }
+
 
     fire(event: T): void {
         for (let i = 0; i < this._listeners.length; i++) {
             try {
                 this._listeners[i].call(this._thises[i], event);
             } catch (e) {
-                /* empty */
+                console.error(e);
             }
         }
+        for (let i = 0; i < this._once_listeners.length; i++) {
+            try {
+                this._once_listeners[i].call(this._once_thises[i], event);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        this._once_listeners = [];
+        this._once_thises = [];
     }
 
     hasListener(): boolean {
-        return this._listeners.length > 0;
+        return this._listeners.length > 0 || this._once_listeners.length > 0;
     }
 
     dispose() {
         this._events = [];
         this._listeners = [];
         this._thises = [];
+        this._once_listeners = [];
+        this._once_thises = [];
     }
 }

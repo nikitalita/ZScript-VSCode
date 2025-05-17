@@ -5,8 +5,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { GZDoomDebugAdapterProxy, GZDoomDebugAdapterProxyOptions } from './GZDoomDebugAdapterProxy';
 import { DebugLauncherService, DebugLaunchState, LaunchCommand } from './DebugLauncherService';
-import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem, startsWithDriveLetter, GAME_NAME, PathIsAbsolute } from './GZDoomGame';
-import path from 'path';
+import { BUILTIN_PK3_FILES, DEFAULT_PORT, isBuiltinPK3File, normalizePath, ProjectItem, startsWithDriveLetter, GAME_NAME, PathIsAbsolute, gzpath as path } from './GZDoomGame';
 import { VSCodeFileAccessor as WorkspaceFileAccessor } from './VSCodeInterface';
 import { WadFileSystemProvider } from './wad-provider/WadFileSystemProvider';
 import { Pk3FSProvider } from './pk3-provider/Pk3FSProvider';
@@ -66,7 +65,9 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
         let new_projects: ProjectItem[] = [];
         for (let project of projects) {
             if (typeof project === 'string') {
-                project = { path: project, archive: project };
+                project = { path: path.normalize(project), archive: path.normalize(project) };
+            } else {
+                project.path = path.normalize(project.path);
             }
             if (!project.archive) {
                 project.archive = project.path;
@@ -74,14 +75,14 @@ class gzdoomConfigurationProvider implements vscode.DebugConfigurationProvider {
 
             // if project.path or project.archive is not absolute, make it absolute
             if (workspaceFolder) {
-                if (!PathIsAbsolute(project.path)) {
+                if (!path.isAbsolute(project.path)) {
                     project.path = path.join(workspaceFolder, project.path);
                 }
-                if (!PathIsAbsolute(project.archive) && !isBuiltinPK3File(project.archive)) {
+                if (!path.isAbsolute(project.archive) && !isBuiltinPK3File(project.archive)) {
                     project.archive = path.join(workspaceFolder, project.archive);
                 }
             }
-            project.archive = normalizePath(project.archive);
+            project.archive = path.normalize(project.archive);
             // if it says it's a directory or the extension is nothing
             if (!project.archive.endsWith('/') && (await workspaceFileAccessor.isDirectory(project.archive) || path.extname(path.basename(project.archive)) === '')) {
                 project.archive += '/';
