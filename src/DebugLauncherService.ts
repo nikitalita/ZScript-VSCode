@@ -113,12 +113,17 @@ export class DebugLauncherService implements IDebugLauncherService {
             command: argv[0],
             args: argv.slice(1)
         }
-        let thing: ProcessInfo[] = await lsof({ pids: [process[0]?.pid] })
-        if (thing.length == 0) {
+        try {
+            let thing: ProcessInfo[] = await lsof({ pids: [process[0]?.pid] })
+            if (thing.length == 0) {
+                return launchCommand;
+            }
+            launchCommand.cwd = thing[0].process.cwd?.name || "";
+            return launchCommand;
+        } catch (e) {
+            console.error(e);
             return launchCommand;
         }
-        launchCommand.cwd = thing[0].process.cwd?.name || "";
-        return launchCommand;
     }
 
     async removeProcessListeners() {
