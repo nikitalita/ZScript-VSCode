@@ -294,7 +294,8 @@ class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
             } else if (options.request === 'attach') {
                 // await this.WarnIfProjectsMissing(options.projects);
                 if ((await debugLauncherService.getGameIsRunning())) {
-                    pid = debugLauncherService.getGamePIDs()[0];
+                    let pids = await debugLauncherService.getGamePIDs();
+                    pid = pids[0];
                     let launchCommand = await debugLauncherService.getLaunchCommandFromRunningProcess(options.port);
                     if (launchCommand) {
                         this.previousCmd.set(_session.id, launchCommand);
