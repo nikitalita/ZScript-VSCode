@@ -383,7 +383,7 @@ export class DebugLauncherService implements IDebugLauncherService {
         if (_checkBad()) {
             return await _handleBad();
         }
-        const GameStartTimeout = 15000;
+        const GameStartTimeout = 20000;
         // get the current system time
         gameIsRunning = await this.waitForGameToStart(GameStartTimeout, () => {
             return !_checkBad();
@@ -403,7 +403,7 @@ export class DebugLauncherService implements IDebugLauncherService {
         this.gamePID = gamePIDs[0];
 
         // game has launched, now we wait for the port to open
-        const connectionTimeout = 15000;
+        const connectionTimeout = 30000;
         let result = false;
         result = await this.waitForPort(port, connectionTimeout, async () => {
             if (cancellationToken.isCancellationRequested) {
